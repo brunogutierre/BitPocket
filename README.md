@@ -33,6 +33,8 @@ A layered-security Bitcoin wallet for Android, built as a study project.
 | UI            | Jetpack Compose + Material 3                        |
 | Build         | Gradle 9.8 (Kotlin DSL, version catalog), AGP 9.4   |
 | Android       | minSdk 30, target/compile SDK 37                    |
+| Bitcoin       | BDK 3.1.0 (`bdk-android` in `:app`, `bdk-jvm` for `:core` tests) |
+| Tests         | JUnit 6 (Jupiter), Kover (>= 80% line coverage)     |
 | Bitcoin       | Bitcoin Dev Kit (bdk-android) — *planned in M0*     |
 | Networks      | Signet (default) and Testnet4 only                  |
 
@@ -43,7 +45,7 @@ Requirements: JDK 17+ and the Android SDK (platform 37). Point Gradle to the SDK
 
 ```bash
 ./gradlew assembleDebug                  # build the debug APK
-./gradlew testDebugUnitTest lint         # unit tests and lint
+./gradlew :core:test testDebugUnitTest lint  # unit tests and lint
 ./gradlew spotlessApply                  # format Kotlin sources (ktlint)
 ./gradlew koverVerify koverHtmlReport    # coverage gate (>= 80% lines)
 adb install app/build/outputs/apk/debug/app-debug.apk

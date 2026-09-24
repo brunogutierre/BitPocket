@@ -21,4 +21,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "BitPocket"
-include(":app")
+include(":app", ":core")

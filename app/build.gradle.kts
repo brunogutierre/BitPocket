@@ -16,6 +16,12 @@ android {
         targetSdk = 37
         versionCode = 1
         versionName = "0.1.0"
+
+        // minSdk 30 devices are 64-bit; shipping only 64-bit ABIs keeps the BDK native
+        // libraries (~15 MB per ABI) out of the APK for architectures nobody runs.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
     }
 
     buildTypes {
@@ -43,6 +49,9 @@ kotlin {
 }
 
 dependencies {
+    implementation(project(":core"))
+    implementation(libs.bdk.android)
+
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(platform(libs.androidx.compose.bom))
