@@ -55,6 +55,21 @@ Required changes to the plan:
    producing a transaction that fails `OP_CHECKSEQUENCEVERIFY`. Before broadcast, check that
    nSequence matches the chosen branch.
 
+## Gate review
+
+The `manager` accepted **GO with changes** and assigned the guards to planned work:
+
+- M1 `feat/send-build`: a `SpendGuard` in `:core` for every spend (Spending and Vault) that
+  excludes unconfirmed coins and checks inputs before finalizing.
+- M3 `feat/vault-policy`: keys at BIP48 `m/48'/1'/0'/2'`; one descriptor per keychain for signing,
+  multipath only for watch-only sync and backup export; the phone signs through
+  `signWithSigners`, so the BDK wallet stays watch-only.
+- M3 `feat/vault-wallet`: explicit `policyPath` for both keychains and a pre-broadcast
+  verification of branch, nSequence and signature count.
+- M4 heartbeat and heir claim: the heir path stays blocked until every input has at least N
+  confirmations.
+- The open upstream issues above are rechecked on every BDK upgrade.
+
 ## Consequences
 
 - The Vault design stays as planned, with the three guards above in the Vault signing code.

@@ -33,3 +33,6 @@ the same build.
   ELF LOAD alignment: `libbdkffi.so` is 16 KB on arm64-v8a and x86_64, and JNA's arm64
   `libjnidispatch.so` is 64 KB. JNA's x86_64 `libjnidispatch.so` is only 4 KB-aligned, which
   affects x86_64 devices/emulators with 16 KB pages until BDK moves to a newer JNA.
+- Coverage gate: Kover verifies `minBound(80, LINE, COVERED_PERCENTAGE)` over `:core` and `:app`.
+  An earlier `MISSED_PERCENTAGE` rule (chosen while `:app` had no measurable code) reported
+  44% missed for a run that was 85.7% covered, so it was dropped for the direct rule.
