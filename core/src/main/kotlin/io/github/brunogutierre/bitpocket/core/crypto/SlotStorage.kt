@@ -1,6 +1,7 @@
 package io.github.brunogutierre.bitpocket.core.crypto
 
 import java.io.File
+import java.io.FileOutputStream
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
@@ -14,7 +15,7 @@ interface SlotStorage {
     )
 }
 
-/** Files at `<root>/slots/{a,b}/slot.bin`, replaced atomically (temp file + rename). */
+/** Files at `<root>/slots/{a,b}/slot.bin`, replaced atomically (fsync'd temp file + rename). */
 class FileSlotStorage(
     private val root: File,
 ) : SlotStorage {
@@ -29,7 +30,10 @@ class FileSlotStorage(
         val target = fileOf(slot)
         target.parentFile.mkdirs()
         val temp = File(target.parentFile, "$FILE_NAME.tmp")
-        temp.writeBytes(bytes)
+        FileOutputStream(temp).use {
+            it.write(bytes)
+            it.fd.sync() // durable before the rename replaces the old file
+        }
         Files.move(temp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
     }
 

@@ -42,40 +42,41 @@ class SlotHeader(
 }
 
 /**
- * One slot file: `header | wrappedDek length (2) | wrappedDek | payload envelope`.
+ * One slot file (stored device-wrapped, see [SlotStore]): `header | dekEnvelope | payloadEnvelope`.
  *
- * - `wrappedDek` = KeyWrapper(AES-GCM(key = Argon2id(PIN), DEK)), so opening needs the device
- *   AND the PIN.
- * - The payload envelope is AES-GCM(key = DEK) over a fixed-size padded plaintext, so every
- *   slot file has the same size whatever it holds.
+ * - `dekEnvelope` = AES-GCM(key = Argon2id(PIN), DEK): opening needs the PIN.
+ * - `payloadEnvelope` = AES-GCM(key = DEK) over a fixed-size padded plaintext, so every slot
+ *   file has the same size whatever it holds.
  */
 class SlotFile(
     val header: SlotHeader,
-    val wrappedDek: ByteArray,
+    val dekEnvelope: ByteArray,
     val payload: ByteArray,
 ) {
-    fun encode(): ByteArray =
-        ByteBuffer
-            .allocate(SlotHeader.SIZE + 2 + wrappedDek.size + payload.size)
-            .put(header.encode())
-            .putShort(wrappedDek.size.toShort())
-            .put(wrappedDek)
-            .put(payload)
-            .array()
+    init {
+        require(dekEnvelope.size == DEK_ENVELOPE_SIZE) { "Corrupted DEK envelope" }
+        require(payload.size == PAYLOAD_ENVELOPE_SIZE) { "Corrupted slot payload" }
+    }
+
+    fun encode(): ByteArray = header.encode() + dekEnvelope + payload
 
     companion object {
+        const val DEK_BYTES = 32
+        val DEK_ENVELOPE_SIZE = AesGcmEnvelope.sealedSize(DEK_BYTES)
+
         /** Plaintext payload capacity, including the 4-byte length prefix. */
         const val PAYLOAD_CAPACITY = 4096
         const val MAX_PAYLOAD_BYTES = PAYLOAD_CAPACITY - 4
         val PAYLOAD_ENVELOPE_SIZE = AesGcmEnvelope.sealedSize(PAYLOAD_CAPACITY)
+        val SIZE = SlotHeader.SIZE + DEK_ENVELOPE_SIZE + PAYLOAD_ENVELOPE_SIZE
 
+        /** @throws IllegalArgumentException if [bytes] is not a well-formed slot file. */
         fun decode(bytes: ByteArray): SlotFile {
+            require(bytes.size == SIZE) { "Slot file must be $SIZE bytes" }
             val buffer = ByteBuffer.wrap(bytes)
             val header = SlotHeader.decode(buffer)
-            val wrappedDek = ByteArray(buffer.short.toInt() and 0xFFFF).also { buffer.get(it) }
-            val payload = ByteArray(buffer.remaining()).also { buffer.get(it) }
-            require(payload.size == PAYLOAD_ENVELOPE_SIZE) { "Corrupted slot payload" }
-            return SlotFile(header, wrappedDek, payload)
+            val dekEnvelope = ByteArray(DEK_ENVELOPE_SIZE).also { buffer.get(it) }
+            return SlotFile(header, dekEnvelope, ByteArray(buffer.remaining()).also { buffer.get(it) })
         }
 
         fun pad(payload: ByteArray): ByteArray {

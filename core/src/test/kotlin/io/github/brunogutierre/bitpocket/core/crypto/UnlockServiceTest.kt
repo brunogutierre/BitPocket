@@ -15,13 +15,13 @@ class UnlockServiceTest {
     private val clock = MutableClock(start)
     private val keyWrapper = FakeKeyWrapper()
     private val kdf = CountingKdf()
-    private val slots = SlotStore(InMemorySlotStorage(), kdf, keyWrapper)
+    private val slots = SlotStore(InMemorySlotStorage(), kdf, keyWrapper, TEST_KDF_PARAMS)
     private val attempts = InMemoryAttemptsStore()
     private val service = UnlockService(slots, attempts, BackoffPolicy(), clock)
 
     private fun givenSlots() {
-        slots.save(SlotId.A, "1111".toCharArray(), "main".toByteArray(), TEST_KDF_PARAMS)
-        slots.save(SlotId.B, "2222".toCharArray(), "decoy".toByteArray(), TEST_KDF_PARAMS)
+        slots.save(SlotId.A, "1111".toCharArray(), "main".toByteArray())
+        slots.save(SlotId.B, "2222".toCharArray(), "decoy".toByteArray())
     }
 
     private fun unlockCountingWork(pin: String): Pair<UnlockResult, Int> {
@@ -87,7 +87,8 @@ class UnlockServiceTest {
 
     @Test
     fun `counts the attempt before running the KDF`() {
-        val crashing = UnlockService(SlotStore(InMemorySlotStorage(), { _, _, _ -> error("killed") }, keyWrapper), attempts)
+        val crashing =
+            UnlockService(SlotStore(InMemorySlotStorage(), { _, _, _ -> error("killed") }, keyWrapper, TEST_KDF_PARAMS), attempts)
 
         assertThrows<IllegalStateException> { crashing.unlock("0000".toCharArray()) }
 
@@ -96,7 +97,7 @@ class UnlockServiceTest {
 
     @Test
     fun `wrong PIN with only one slot saved still runs the KDF twice`() {
-        slots.save(SlotId.A, "1111".toCharArray(), "main".toByteArray(), TEST_KDF_PARAMS)
+        slots.save(SlotId.A, "1111".toCharArray(), "main".toByteArray())
 
         val (result, work) = unlockCountingWork("0000")
 

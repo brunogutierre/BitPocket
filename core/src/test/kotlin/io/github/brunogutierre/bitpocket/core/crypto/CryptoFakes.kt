@@ -1,5 +1,7 @@
 package io.github.brunogutierre.bitpocket.core.crypto
 
+import java.security.SecureRandom
+
 /** Fast Argon2id parameters for tests only. */
 val TEST_KDF_PARAMS = KdfParams(memoryKib = 64, iterations = 2, parallelism = 1)
 
@@ -17,18 +19,29 @@ class FakeKeyWrapper : KeyWrapper {
     }
 }
 
-/** Real Argon2id that counts calls, to check constant work. */
+/** Real Argon2id that records calls and keeps every derived key, to check work and wiping. */
 class CountingKdf : Kdf {
-    var calls = 0
-        private set
+    val params = mutableListOf<KdfParams>()
+    val derivedKeys = mutableListOf<ByteArray>()
+    val calls get() = params.size
 
     override fun deriveKey(
         password: CharArray,
         salt: ByteArray,
         params: KdfParams,
     ): ByteArray {
-        calls++
-        return Argon2idKdf.deriveKey(password, salt, params)
+        this.params += params
+        return Argon2idKdf.deriveKey(password, salt, params).also { derivedKeys += it }
+    }
+}
+
+/** SecureRandom that keeps the arrays it fills, to check that secrets are wiped. */
+class RecordingRandom : SecureRandom() {
+    val filled = mutableListOf<ByteArray>()
+
+    override fun nextBytes(bytes: ByteArray) {
+        super.nextBytes(bytes)
+        filled += bytes
     }
 }
 
