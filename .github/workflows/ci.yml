@@ -29,6 +29,11 @@ jobs:
       # the Android SDK with platform android-37.0.
       - uses: gradle/actions/setup-gradle@v6
 
+      # Mainnet is disabled by design: fail fast (before the slower Gradle build)
+      # if production code references it outside the single allowed mapping file.
+      - name: Check no mainnet references
+        run: sh scripts/check-no-mainnet.sh
+
       - name: Check, test and build
         run: ./gradlew spotlessCheck lint testDebugUnitTest koverVerify assembleDebug
 
