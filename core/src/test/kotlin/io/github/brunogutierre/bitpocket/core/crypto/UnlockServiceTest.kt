@@ -99,6 +99,26 @@ class UnlockServiceTest {
     }
 
     @Test
+    fun `fresh install without slot files is a wrong PIN after two derivations`() {
+        val (result, work) = unlockMeasuringWork("1111")
+
+        assertEquals(UnlockResult.Wrong(Duration.ZERO), result)
+        assertEquals(2, work.kdfCalls)
+    }
+
+    @Test
+    fun `right PIN with a tampered payload fails without resetting the counter`() {
+        givenSlots()
+        val plain = keyWrapper.unwrap(storage.files.getValue(SlotId.A))
+        plain[plain.size - 1] = (plain.last().toInt() xor 1).toByte()
+        storage.files[SlotId.A] = keyWrapper.wrap(plain)
+
+        assertThrows<AuthenticationFailedException> { service.unlock("1111".toCharArray()) }
+
+        assertEquals(1, attempts.read().failedAttempts)
+    }
+
+    @Test
     fun `wipes the PIN keys derived for both slots`() {
         givenSlots()
         kdf.derivedKeys.clear()

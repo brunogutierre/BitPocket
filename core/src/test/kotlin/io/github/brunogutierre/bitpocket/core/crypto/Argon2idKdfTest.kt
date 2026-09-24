@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.CsvSource
 
 class Argon2idKdfTest {
     private val fast = KdfParams(memoryKib = 64, iterations = 2, parallelism = 1)
@@ -27,11 +29,14 @@ class Argon2idKdfTest {
     }
 
     @Test
-    fun `derives a deterministic 32-byte key from the UTF-8 password`() {
-        val key = Argon2idKdf.deriveKey("1234".toCharArray(), salt, fast)
+    fun `derives a deterministic 32-byte key from the UTF-8 password without touching it`() {
+        val password = "1234".toCharArray()
+
+        val key = Argon2idKdf.deriveKey(password, salt, fast)
 
         assertEquals(KdfParams.KEY_BYTES, key.size)
         assertArrayEquals(key, Argon2idKdf.derive("1234".toByteArray(), salt, fast, KdfParams.KEY_BYTES))
+        assertEquals("1234", String(password))
     }
 
     @Test
@@ -42,19 +47,21 @@ class Argon2idKdfTest {
         assertFalse(key.contentEquals(Argon2idKdf.deriveKey("1234".toCharArray(), salt.reversedArray(), fast)))
     }
 
-    @Test
-    fun `leaves the caller's password untouched`() {
-        val password = "1234".toCharArray()
-
-        Argon2idKdf.deriveKey(password, salt, fast)
-
-        assertEquals("1234", String(password))
-    }
-
-    @Test
-    fun `rejects invalid parameters`() {
-        assertThrows<IllegalArgumentException> { KdfParams(memoryKib = 4, iterations = 2, parallelism = 1) }
-        assertThrows<IllegalArgumentException> { KdfParams(memoryKib = 64, iterations = 0, parallelism = 1) }
-        assertThrows<IllegalArgumentException> { KdfParams(memoryKib = 64, iterations = 2, parallelism = 0) }
+    @ParameterizedTest
+    @CsvSource(
+        "4, 2, 1", // below 8 KiB per lane
+        "262145, 2, 1", // above 256 MiB
+        "64, 0, 1",
+        "64, 11, 1",
+        "64, 2, 0",
+        "64, 2, 5",
+        "64, 2, 256",
+    )
+    fun `rejects out-of-bounds parameters`(
+        memoryKib: Int,
+        iterations: Int,
+        parallelism: Int,
+    ) {
+        assertThrows<IllegalArgumentException> { KdfParams(memoryKib, iterations, parallelism) }
     }
 }

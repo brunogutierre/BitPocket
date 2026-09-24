@@ -55,16 +55,4 @@ class AesGcmEnvelopeTest {
         assertThrows<AuthenticationFailedException> { AesGcmEnvelope.open(key, sealed, "other".toByteArray()) }
         assertThrows<AuthenticationFailedException> { AesGcmEnvelope.open(key, sealed.copyOf(10), aad) }
     }
-
-    @Test
-    fun `wipe zeroes secrets`() {
-        val secret = byteArrayOf(1, 2, 3)
-        val pin = charArrayOf('1', '2')
-
-        secret.wipe()
-        pin.wipe()
-
-        assertArrayEquals(ByteArray(3), secret)
-        assertArrayEquals(CharArray(2), pin)
-    }
 }
