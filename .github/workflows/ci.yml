@@ -35,7 +35,7 @@ jobs:
         run: sh scripts/check-no-mainnet.sh
 
       - name: Check, test and build
-        run: ./gradlew spotlessCheck lint testDebugUnitTest koverVerify assembleDebug
+        run: ./gradlew spotlessCheck lint :core:test testDebugUnitTest koverVerify assembleDebug
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v7
