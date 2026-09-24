@@ -1,5 +1,7 @@
 import kotlinx.kover.gradle.plugin.dsl.AggregationType
 import kotlinx.kover.gradle.plugin.dsl.CoverageUnit
+import org.gradle.api.services.BuildService
+import org.gradle.api.services.BuildServiceParameters
 
 plugins {
     alias(libs.plugins.android.application) apply false
@@ -21,6 +23,24 @@ spotless {
         target("**/*.kts")
         targetExclude("**/build/**")
         ktlint(ktlintVersion)
+    }
+}
+
+// Kover report/verify tasks of different projects share static state in the coverage engine and
+// cross-contaminate when they run concurrently, which Gradle does whenever the configuration
+// cache is on (https://github.com/Kotlin/kotlinx-kover/issues/822). Run them one at a time and
+// never reuse their results from the build cache, which could replay a contaminated verdict.
+abstract class KoverSerialExecution : BuildService<BuildServiceParameters.None>
+
+val koverSerialExecution =
+    gradle.sharedServices.registerIfAbsent("koverSerialExecution", KoverSerialExecution::class) {
+        maxParallelUsages.set(1)
+    }
+
+allprojects {
+    tasks.matching { it.name.startsWith("kover") }.configureEach {
+        usesService(koverSerialExecution)
+        outputs.cacheIf { false }
     }
 }
 
