@@ -39,6 +39,9 @@ kover {
                 classes(
                     "*.ui.*",
                     "*.di.*",
+                    // Android Keystore/BiometricManager code: covered by instrumented tests.
+                    "*.keystore.*",
+                    "*.biometric.*",
                     "*ComposableSingletons*",
                     "*.BuildConfig",
                     "*.R",
