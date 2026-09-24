@@ -50,11 +50,8 @@ kover {
             }
         }
         verify {
-            // Expressed as "at most 20% of lines missed" (equivalent to >= 80% covered)
-            // because Kover reports 0% covered when no class is left after the
-            // exclusions, which would fail the build for UI-only modules.
             rule("Minimum 80% line coverage") {
-                maxBound(20, CoverageUnit.LINE, AggregationType.MISSED_PERCENTAGE)
+                minBound(80, CoverageUnit.LINE, AggregationType.COVERED_PERCENTAGE)
             }
         }
     }
