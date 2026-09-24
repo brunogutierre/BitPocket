@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">BitPocket</string>
+    <string name="tagline">Signet/Testnet4 study wallet</string>
+    <string name="warning_not_audited">Study project. Mainnet is disabled by design. Not audited.</string>
+</resources>
