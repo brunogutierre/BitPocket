@@ -53,6 +53,7 @@ kotlin {
 dependencies {
     implementation(project(":core"))
     implementation(libs.bdk.android)
+    implementation(libs.androidx.biometric)
 
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.ktx)
