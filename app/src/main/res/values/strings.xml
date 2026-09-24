@@ -2,4 +2,7 @@
     <string name="app_name">BitPocket</string>
     <string name="tagline">Signet/Testnet4 study wallet</string>
     <string name="warning_not_audited">Study project. Mainnet is disabled by design. Not audited.</string>
+    <string name="network_badge_description">Test network %1$s, coins have no value</string>
+    <string name="action_retry">Retry</string>
+    <string name="loading">Loading</string>
 </resources>
