@@ -1,5 +1,7 @@
 # BitPocket
 
+[![CI](https://github.com/brunogutierre/BitPocket/actions/workflows/ci.yml/badge.svg)](https://github.com/brunogutierre/BitPocket/actions/workflows/ci.yml)
+
 A layered-security Bitcoin wallet for Android, built as a study project.
 
 > [!WARNING]
@@ -42,8 +44,13 @@ Requirements: JDK 17+ and the Android SDK (platform 37). Point Gradle to the SDK
 ```bash
 ./gradlew assembleDebug                  # build the debug APK
 ./gradlew testDebugUnitTest lint         # unit tests and lint
+./gradlew spotlessApply                  # format Kotlin sources (ktlint)
+./gradlew koverVerify koverHtmlReport    # coverage gate (>= 80% lines)
 adb install app/build/outputs/apk/debug/app-debug.apk
 ```
+
+CI (GitHub Actions) runs `spotlessCheck lint testDebugUnitTest koverVerify assembleDebug`
+on every pull request and push to `main`.
 
 ## Roadmap
 
