@@ -17,6 +17,8 @@ android {
         versionCode = 1
         versionName = "0.1.0"
 
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
         // minSdk 30 devices are 64-bit; shipping only 64-bit ABIs keeps the BDK native
         // libraries (~15 MB per ABI) out of the APK for architectures nobody runs.
         ndk {
@@ -59,4 +61,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     debugImplementation(libs.androidx.compose.ui.tooling)
+
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
 }
