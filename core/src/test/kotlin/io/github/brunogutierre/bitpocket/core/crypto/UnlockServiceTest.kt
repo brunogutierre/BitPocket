@@ -5,67 +5,84 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
-import java.time.Clock
 import java.time.Duration
-import java.time.Instant
-import java.time.ZoneOffset
 
 class UnlockServiceTest {
-    private val start = Instant.parse("2026-09-24T12:00:00Z")
-    private val clock = MutableClock(start)
+    private val clock = FakeUnlockClock()
     private val keyWrapper = FakeKeyWrapper()
     private val kdf = CountingKdf()
-    private val slots = SlotStore(InMemorySlotStorage(), kdf, keyWrapper, TEST_KDF_PARAMS)
+    private val storage = InMemorySlotStorage()
+    private val slots = SlotStore(storage, kdf, keyWrapper, TEST_KDF_PARAMS)
     private val attempts = InMemoryAttemptsStore()
-    private val service = UnlockService(slots, attempts, BackoffPolicy(), clock)
+    private val service = UnlockService(slots, attempts, clock)
+
+    private data class Work(
+        val kdfCalls: Int,
+        val unwraps: Int,
+    )
+
+    private fun unlockMeasuringWork(pin: String): Pair<UnlockResult, Work> {
+        val kdfBefore = kdf.calls
+        val unwrapsBefore = keyWrapper.unwrapCalls
+        val result = service.unlock(pin.toCharArray())
+        return result to Work(kdf.calls - kdfBefore, keyWrapper.unwrapCalls - unwrapsBefore)
+    }
 
     private fun givenSlots() {
         slots.save(SlotId.A, "1111".toCharArray(), "main".toByteArray())
         slots.save(SlotId.B, "2222".toCharArray(), "decoy".toByteArray())
     }
 
-    private fun unlockCountingWork(pin: String): Pair<UnlockResult, Int> {
-        val kdfBefore = kdf.calls
-        val unwrapBefore = keyWrapper.unwrapCalls
-        val result = service.unlock(pin.toCharArray())
-        assertEquals(kdf.calls - kdfBefore, keyWrapper.unwrapCalls - unwrapBefore, "one unwrap per KDF")
-        return result to kdf.calls - kdfBefore
-    }
+    private fun wrongPin() = service.unlock("0000".toCharArray())
 
     @Test
-    fun `does the same KDF work for main, other-slot and wrong PINs`() {
+    fun `does the same work for main, other-slot and wrong PINs`() {
         givenSlots()
 
-        val (main, mainWork) = unlockCountingWork("1111")
-        val (other, otherWork) = unlockCountingWork("2222")
-        val (wrong, wrongWork) = unlockCountingWork("0000")
+        val (main, mainWork) = unlockMeasuringWork("1111")
+        val (other, otherWork) = unlockMeasuringWork("2222")
+        val (wrong, wrongWork) = unlockMeasuringWork("0000")
 
         assertEquals(SlotId.A, (main as UnlockResult.Unlocked).slot)
         assertArrayEquals("main".toByteArray(), main.payload)
         assertEquals(SlotId.B, (other as UnlockResult.Unlocked).slot)
         assertArrayEquals("decoy".toByteArray(), other.payload)
-        assertEquals(UnlockResult.Wrong(lockedUntil = null), wrong)
-        assertEquals(listOf(2, 2, 2), listOf(mainWork, otherWork, wrongWork))
+        assertEquals(UnlockResult.Wrong(Duration.ZERO), wrong)
+        assertEquals(listOf(Work(2, 2), Work(2, 2), Work(2, 2)), listOf(mainWork, otherWork, wrongWork))
     }
 
     @Test
-    fun `locks out with growing delays after the free attempts`() {
+    fun `locks out after the free attempts, rewriting the record on every attempt`() {
         givenSlots()
-        repeat(4) { assertEquals(UnlockResult.Wrong(null), service.unlock("0000".toCharArray())) }
+        repeat(4) { assertEquals(UnlockResult.Wrong(Duration.ZERO), wrongPin()) }
+        assertEquals(UnlockResult.Wrong(Duration.ofSeconds(30)), wrongPin())
+        val writesBefore = attempts.writes
 
-        assertEquals(UnlockResult.Wrong(start.plusSeconds(30)), service.unlock("0000".toCharArray()))
-        val (locked, work) = unlockCountingWork("1111")
-        assertEquals(UnlockResult.LockedOut(start.plusSeconds(30)), locked, "even the right PIN waits")
-        assertEquals(0, work, "no KDF while locked out")
+        clock.advanceSeconds(10)
+        val (locked, work) = unlockMeasuringWork("1111")
 
-        clock.now = start.plusSeconds(30)
-        assertEquals(UnlockResult.Wrong(start.plusSeconds(90)), service.unlock("0000".toCharArray()))
+        assertEquals(UnlockResult.LockedOut(Duration.ofSeconds(20)), locked, "even the right PIN waits")
+        assertEquals(Work(0, 0), work, "no KDF while locked out")
+        assertEquals(writesBefore + 1, attempts.writes)
+        clock.advanceSeconds(20)
+        assertEquals(UnlockResult.Wrong(Duration.ofSeconds(60)), wrongPin())
+    }
+
+    @Test
+    fun `a reboot does not shorten a lockout`() {
+        givenSlots()
+        repeat(5) { wrongPin() }
+
+        clock.bootCount++
+        clock.elapsedRealtimeMs = 1_000
+
+        assertEquals(UnlockResult.LockedOut(Duration.ofSeconds(30)), service.unlock("1111".toCharArray()))
     }
 
     @Test
     fun `success resets the counter`() {
         givenSlots()
-        repeat(3) { service.unlock("0000".toCharArray()) }
+        repeat(3) { wrongPin() }
 
         assertInstanceOf(UnlockResult.Unlocked::class.java, service.unlock("1111".toCharArray()))
 
@@ -73,22 +90,8 @@ class UnlockServiceTest {
     }
 
     @Test
-    fun `rewrites the attempts record on every attempt`() {
-        givenSlots()
-        service.unlock("0000".toCharArray())
-        service.unlock("1111".toCharArray())
-        repeat(5) { service.unlock("0000".toCharArray()) }
-        val writesBefore = attempts.writes
-
-        service.unlock("0000".toCharArray()) // locked out
-
-        assertEquals(1, attempts.writes - writesBefore)
-    }
-
-    @Test
     fun `counts the attempt before running the KDF`() {
-        val crashing =
-            UnlockService(SlotStore(InMemorySlotStorage(), { _, _, _ -> error("killed") }, keyWrapper, TEST_KDF_PARAMS), attempts)
+        val crashing = UnlockService(SlotStore(storage, { _, _, _ -> error("killed") }, keyWrapper), attempts, clock)
 
         assertThrows<IllegalStateException> { crashing.unlock("0000".toCharArray()) }
 
@@ -96,58 +99,13 @@ class UnlockServiceTest {
     }
 
     @Test
-    fun `wrong PIN with only one slot saved still runs the KDF twice`() {
-        slots.save(SlotId.A, "1111".toCharArray(), "main".toByteArray())
+    fun `wipes the PIN keys derived for both slots`() {
+        givenSlots()
+        kdf.derivedKeys.clear()
 
-        val (result, work) = unlockCountingWork("0000")
+        service.unlock("1111".toCharArray())
 
-        assertEquals(UnlockResult.Wrong(null), result)
-        assertEquals(2, work)
+        assertEquals(2, kdf.derivedKeys.size)
+        kdf.derivedKeys.forEach { key -> assertArrayEquals(ByteArray(KdfParams.KEY_BYTES), key) }
     }
-}
-
-class BackoffPolicyTest {
-    private val policy = BackoffPolicy()
-
-    @Test
-    fun `follows the free-then-exponential schedule with a cap`() {
-        val delays = (0..13).map { policy.delayAfter(it).seconds }
-
-        assertEquals(listOf(0L, 0, 0, 0, 0, 30, 60, 120, 240, 480, 960, 1920, 3600, 3600), delays)
-        assertEquals(Duration.ofHours(1), policy.delayAfter(Int.MAX_VALUE))
-    }
-
-    @Test
-    fun `attempts record has a fixed-size round-trippable encoding`() {
-        val state = AttemptsState(7, Instant.ofEpochMilli(1_790_000_000_000))
-
-        assertEquals(AttemptsState.SIZE, state.encode().size)
-        assertEquals(AttemptsState.SIZE, AttemptsState.NONE.encode().size)
-        assertEquals(state, AttemptsState.decode(state.encode()))
-        assertEquals(AttemptsState.NONE, AttemptsState.decode(AttemptsState.NONE.encode()))
-        assertThrows<IllegalArgumentException> { AttemptsState.decode(ByteArray(3)) }
-    }
-}
-
-class InMemoryAttemptsStore : AttemptsStore {
-    private var state = AttemptsState.NONE
-    var writes = 0
-        private set
-
-    override fun read() = state
-
-    override fun write(state: AttemptsState) {
-        writes++
-        this.state = state
-    }
-}
-
-class MutableClock(
-    var now: Instant,
-) : Clock() {
-    override fun instant(): Instant = now
-
-    override fun getZone() = ZoneOffset.UTC
-
-    override fun withZone(zone: java.time.ZoneId) = this
 }

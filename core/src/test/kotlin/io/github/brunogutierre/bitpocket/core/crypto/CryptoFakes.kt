@@ -59,3 +59,27 @@ class InMemorySlotStorage : SlotStorage {
         files[slot] = bytes.copyOf()
     }
 }
+
+class InMemoryAttemptsStore : AttemptsStore {
+    private var state = AttemptsState.NONE
+    var writes = 0
+        private set
+
+    override fun read() = state
+
+    override fun write(state: AttemptsState) {
+        writes++
+        this.state = state
+    }
+}
+
+class FakeUnlockClock(
+    var elapsedRealtimeMs: Long = 1_000_000,
+    var bootCount: Int = 7,
+) : UnlockClock {
+    override fun now() = ClockReading(elapsedRealtimeMs, bootCount)
+
+    fun advanceSeconds(seconds: Long) {
+        elapsedRealtimeMs += seconds * 1000
+    }
+}
