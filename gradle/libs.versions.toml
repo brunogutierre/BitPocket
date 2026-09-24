@@ -6,6 +6,7 @@ activityCompose = "1.13.0"
 lifecycle = "2.11.0"
 spotless = "8.10.2"
 ktlint = "1.8.0"
+kover = "0.9.9"
 
 [libraries]
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
@@ -20,3 +21,4 @@ androidx-compose-material3 = { module = "androidx.compose.material3:material3" }
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
+kover = { id = "org.jetbrains.kotlinx.kover", version.ref = "kover" }
