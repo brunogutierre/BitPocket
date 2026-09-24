@@ -3,6 +3,7 @@ import kotlinx.kover.gradle.plugin.dsl.CoverageUnit
 
 plugins {
     alias(libs.plugins.android.application) apply false
+    alias(libs.plugins.kotlin.jvm) apply false
     alias(libs.plugins.kotlin.compose) apply false
     alias(libs.plugins.spotless)
     alias(libs.plugins.kover)
@@ -26,6 +27,7 @@ spotless {
 // Merged coverage over all modules: add each new module to `dependencies { kover(...) }`.
 dependencies {
     kover(project(":app"))
+    kover(project(":core"))
 }
 
 kover {

@@ -43,6 +43,9 @@ kotlin {
 }
 
 dependencies {
+    implementation(project(":core"))
+    implementation(libs.bdk.android)
+
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(platform(libs.androidx.compose.bom))
