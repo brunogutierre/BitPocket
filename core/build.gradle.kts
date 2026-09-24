@@ -21,6 +21,8 @@ dependencies {
     // The BDK flavor is chosen by the consumer: bdk-android in :app, bdk-jvm in tests.
     // Both expose the same org.bitcoindevkit API.
     compileOnly(libs.bdk.jvm)
+    // Argon2id (not available in the JDK or on Android).
+    implementation(libs.bouncycastle.prov)
 
     testImplementation(libs.bdk.jvm)
     testImplementation(platform(libs.junit.bom))
