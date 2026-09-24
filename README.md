@@ -45,7 +45,7 @@ Requirements: JDK 17+ and the Android SDK (platform 37). Point Gradle to the SDK
 
 ```bash
 ./gradlew assembleDebug                  # build the debug APK
-./gradlew testDebugUnitTest lint         # unit tests and lint
+./gradlew :core:test testDebugUnitTest lint  # unit tests and lint
 ./gradlew spotlessApply                  # format Kotlin sources (ktlint)
 ./gradlew koverVerify koverHtmlReport    # coverage gate (>= 80% lines)
 adb install app/build/outputs/apk/debug/app-debug.apk
