@@ -25,6 +25,7 @@ import io.github.brunogutierre.bitpocket.onboarding.RestoreSeedViewModel
 import io.github.brunogutierre.bitpocket.onboarding.SetPinViewModel
 import io.github.brunogutierre.bitpocket.onboarding.VerifySeedViewModel
 import io.github.brunogutierre.bitpocket.onboarding.WelcomeViewModel
+import io.github.brunogutierre.bitpocket.ui.components.SecureScreen
 import io.github.brunogutierre.bitpocket.ui.home.HomeScreen
 import io.github.brunogutierre.bitpocket.ui.lock.LockScreen
 import io.github.brunogutierre.bitpocket.ui.onboarding.CreateSeedScreen
@@ -89,25 +90,31 @@ fun BitPocketNavHost(
                     )
                 }
                 entry<CreateSeed> {
-                    CreateSeedScreen(
-                        viewModel { CreateSeedViewModel(container.onboardingDraft) },
-                        onBack = back,
-                        onWrittenDown = { backStack.add(VerifySeed) },
-                    )
+                    SecureScreen {
+                        CreateSeedScreen(
+                            viewModel { CreateSeedViewModel(container.onboardingDraft) },
+                            onBack = back,
+                            onWrittenDown = { backStack.add(VerifySeed) },
+                        )
+                    }
                 }
                 entry<VerifySeed> {
-                    VerifySeedScreen(
-                        viewModel { VerifySeedViewModel(container.onboardingDraft, container.mnemonicService) },
-                        onBack = back,
-                        onVerified = { backStack.add(SetPin) },
-                    )
+                    SecureScreen {
+                        VerifySeedScreen(
+                            viewModel { VerifySeedViewModel(container.onboardingDraft, container.mnemonicService) },
+                            onBack = back,
+                            onVerified = { backStack.add(SetPin) },
+                        )
+                    }
                 }
                 entry<RestoreSeed> {
-                    RestoreSeedScreen(
-                        viewModel { RestoreSeedViewModel(container.onboardingDraft, container.mnemonicService) },
-                        onBack = back,
-                        onRestored = { backStack.add(SetPin) },
-                    )
+                    SecureScreen {
+                        RestoreSeedScreen(
+                            viewModel { RestoreSeedViewModel(container.onboardingDraft, container.mnemonicService) },
+                            onBack = back,
+                            onRestored = { backStack.add(SetPin) },
+                        )
+                    }
                 }
                 entry<SetPin> {
                     SetPinScreen(

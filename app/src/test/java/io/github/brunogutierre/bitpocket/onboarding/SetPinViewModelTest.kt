@@ -30,17 +30,17 @@ class SetPinViewModelTest {
             draft.setMnemonic(ByteArray(16), List(12) { "abandon" })
 
             vm.created.test {
-                type("12340")
+                type("27490")
                 vm.backspace()
                 type("5")
                 assertEquals(PinStage.CHOOSE, vm.state.value.stage)
-                type("6")
+                type("8")
                 assertEquals(PinStage.CONFIRM, vm.state.value.stage)
-                type("123456")
+                type("274958")
                 awaitItem()
             }
 
-            assertEquals("123456", wallet.createdPin)
+            assertEquals("274958", wallet.createdPin)
             assertEquals(SupportedNetwork.TESTNET4, wallet.createdNetwork)
             assertNull(draft.entropy)
         }
@@ -49,8 +49,8 @@ class SetPinViewModelTest {
     fun `a mismatch restarts from the first PIN with an error shake`() {
         draft.setMnemonic(ByteArray(16), List(12) { "abandon" })
 
-        type("123456")
-        type("654321")
+        type("274958")
+        type("274950")
 
         val state = vm.state.value
         assertEquals(PinStage.CHOOSE, state.stage)
@@ -61,12 +61,26 @@ class SetPinViewModelTest {
     }
 
     @Test
+    fun `a weak PIN is rejected before confirmation`() {
+        draft.setMnemonic(ByteArray(16), List(12) { "abandon" })
+
+        type("123123")
+
+        val state = vm.state.value
+        assertEquals(PinStage.CHOOSE, state.stage)
+        assertTrue(state.weakPin)
+        assertEquals(1, state.errorSignal)
+        vm.digit('2')
+        assertFalse(vm.state.value.weakPin, "the message clears on the next digit")
+    }
+
+    @Test
     fun `a failed save lets the user try again and keeps the draft`() {
         draft.setMnemonic(ByteArray(16), List(12) { "abandon" })
         wallet.failCreate = true
 
-        type("123456")
-        type("123456")
+        type("274958")
+        type("274958")
 
         assertTrue(vm.state.value.saveFailed)
         assertFalse(vm.state.value.saving)

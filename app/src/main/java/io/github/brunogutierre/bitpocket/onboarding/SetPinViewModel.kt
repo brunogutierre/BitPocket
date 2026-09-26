@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.brunogutierre.bitpocket.core.crypto.wipe
 import io.github.brunogutierre.bitpocket.core.onboarding.OnboardingDraft
+import io.github.brunogutierre.bitpocket.core.session.PinPolicy
 import io.github.brunogutierre.bitpocket.core.session.WalletAccess
 import io.github.brunogutierre.bitpocket.security.PinBuffer
 import kotlinx.coroutines.CancellationException
@@ -24,6 +25,7 @@ data class SetPinUiState(
     val stage: PinStage = PinStage.CHOOSE,
     val entered: Int = 0,
     val mismatch: Boolean = false,
+    val weakPin: Boolean = false,
     val errorSignal: Int = 0,
     val saving: Boolean = false,
     val saveFailed: Boolean = false,
@@ -47,9 +49,10 @@ class SetPinViewModel(
     fun digit(digit: Char) {
         if (_state.value.saving) return
         current.append(digit)
-        _state.update { it.copy(entered = current.size, mismatch = false, saveFailed = false) }
+        _state.update { it.copy(entered = current.size, mismatch = false, weakPin = false, saveFailed = false) }
         if (!current.isFull) return
         when {
+            _state.value.stage == PinStage.CHOOSE && isWeak(chosen) -> restart(mismatch = false, weakPin = true)
             _state.value.stage == PinStage.CHOOSE -> _state.update { it.copy(stage = PinStage.CONFIRM, entered = 0) }
             chosen.contentEquals(confirmation) -> save()
             else -> restart(mismatch = true)
@@ -83,10 +86,23 @@ class SetPinViewModel(
         }
     }
 
-    private fun restart(mismatch: Boolean) {
+    private fun isWeak(pin: PinBuffer): Boolean {
+        val digits = pin.toCharArray()
+        return try {
+            PinPolicy.isTooWeak(digits)
+        } finally {
+            digits.wipe()
+        }
+    }
+
+    private fun restart(
+        mismatch: Boolean,
+        weakPin: Boolean = false,
+    ) {
         clearPins()
+        val shake = mismatch || weakPin
         _state.update {
-            SetPinUiState(mismatch = mismatch, errorSignal = if (mismatch) it.errorSignal + 1 else it.errorSignal)
+            SetPinUiState(mismatch = mismatch, weakPin = weakPin, errorSignal = if (shake) it.errorSignal + 1 else it.errorSignal)
         }
     }
 

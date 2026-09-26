@@ -30,9 +30,10 @@ fun SetPinScreen(
                 state.saving -> R.string.pin_creating
                 state.saveFailed -> R.string.pin_save_failed
                 state.mismatch -> R.string.pin_mismatch
+                state.weakPin -> R.string.pin_too_weak
                 else -> R.string.pin_choose_body
             }
-        val isError = state.saveFailed || state.mismatch
+        val isError = state.saveFailed || state.mismatch || state.weakPin
         Text(
             stringResource(message),
             style = MaterialTheme.typography.bodyLarge,

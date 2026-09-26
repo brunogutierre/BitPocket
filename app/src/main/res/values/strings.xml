@@ -50,4 +50,5 @@
     <string name="home_title">Spending</string>
     <string name="home_placeholder">Balance and activity arrive in the next milestone.</string>
     <string name="home_lock">Lock</string>
+    <string name="pin_too_weak">PIN too easy to guess. Choose another one.</string>
 </resources>
