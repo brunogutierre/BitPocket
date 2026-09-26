@@ -10,6 +10,18 @@ import kotlinx.serialization.Serializable
 data object Welcome : NavKey
 
 @Serializable
+data object CreateSeed : NavKey
+
+@Serializable
+data object VerifySeed : NavKey
+
+@Serializable
+data object RestoreSeed : NavKey
+
+@Serializable
+data object SetPin : NavKey
+
+@Serializable
 data object Lock : NavKey
 
 @Serializable

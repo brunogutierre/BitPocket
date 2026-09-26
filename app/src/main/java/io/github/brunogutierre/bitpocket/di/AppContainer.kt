@@ -7,6 +7,8 @@ import io.github.brunogutierre.bitpocket.core.crypto.FileSlotStorage
 import io.github.brunogutierre.bitpocket.core.crypto.KdfParams
 import io.github.brunogutierre.bitpocket.core.crypto.SlotStore
 import io.github.brunogutierre.bitpocket.core.crypto.UnlockService
+import io.github.brunogutierre.bitpocket.core.onboarding.OnboardingDraft
+import io.github.brunogutierre.bitpocket.core.seed.MnemonicService
 import io.github.brunogutierre.bitpocket.core.session.LaunchState
 import io.github.brunogutierre.bitpocket.keystore.AndroidUnlockClock
 import io.github.brunogutierre.bitpocket.keystore.KeyAliases
@@ -36,6 +38,11 @@ class AppContainer(
             clock = AndroidUnlockClock(appContext.contentResolver),
         )
     }
+
+    val mnemonicService: MnemonicService by lazy { MnemonicService() }
+
+    /** The wallet being created or restored; memory only. */
+    val onboardingDraft = OnboardingDraft()
 
     fun launchState(): LaunchState = LaunchState.of(slotStorage)
 }

@@ -16,4 +16,28 @@
         <item quantity="one">%1$d of %2$d digits entered</item>
         <item quantity="other">%1$d of %2$d digits entered</item>
     </plurals>
+    <string name="action_back">Back</string>
+    <string name="welcome_create">Create new wallet</string>
+    <string name="welcome_restore">Restore from recovery words</string>
+    <string name="welcome_advanced">Advanced</string>
+    <string name="welcome_network_title">Test network</string>
+    <string name="welcome_network_default">%1$s (default)</string>
+    <string name="create_title">Your recovery words</string>
+    <string name="create_warning_title">Write them on paper</string>
+    <string name="create_warning_body">Anyone with these words controls the wallet. Never share, type or photograph them.</string>
+    <string name="create_done">I wrote them down</string>
+    <string name="verify_title">Check your words</string>
+    <string name="verify_step">Step %1$d of %2$d</string>
+    <string name="verify_prompt">Which is word #%1$d?</string>
+    <string name="restore_title">Restore wallet</string>
+    <string name="restore_word_label">Word %1$d of %2$d</string>
+    <string name="restore_remove_last">Remove last word</string>
+    <string name="restore_submit">Restore</string>
+    <string name="restore_error_checksum">These words are not a valid recovery phrase. Check their order and spelling.</string>
+    <string name="restore_error_unknown">Unknown words at positions %1$s.</string>
+    <string name="route_set_pin">Choose a PIN</string>
+    <plurals name="restore_word_count">
+        <item quantity="one">%1$d word</item>
+        <item quantity="other">%1$d words</item>
+    </plurals>
 </resources>
