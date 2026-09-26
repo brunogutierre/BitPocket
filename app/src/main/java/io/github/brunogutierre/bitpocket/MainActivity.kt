@@ -13,10 +13,11 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         // Only used for a fresh back stack; a restored one keeps its own routes.
-        val startRoute = (application as BitPocketApp).container.launchState().startRoute()
+        val container = (application as BitPocketApp).container
+        val startRoute = container.launchState().startRoute()
         setContent {
             BitPocketTheme {
-                BitPocketNavHost(startRoute)
+                BitPocketNavHost(container, startRoute)
             }
         }
     }
