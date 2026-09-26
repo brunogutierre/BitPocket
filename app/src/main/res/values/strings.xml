@@ -6,8 +6,6 @@
     <string name="action_retry">Retry</string>
     <string name="loading">Loading</string>
     <string name="warning_title">Study project</string>
-    <string name="route_lock">Unlock</string>
-    <string name="route_home">Home</string>
     <string name="pin_delete">Delete last digit</string>
     <string name="seed_hidden">Recovery words hidden</string>
     <string name="seed_reveal">Reveal words</string>
@@ -35,9 +33,21 @@
     <string name="restore_submit">Restore</string>
     <string name="restore_error_checksum">These words are not a valid recovery phrase. Check their order and spelling.</string>
     <string name="restore_error_unknown">Unknown words at positions %1$s.</string>
-    <string name="route_set_pin">Choose a PIN</string>
     <plurals name="restore_word_count">
         <item quantity="one">%1$d word</item>
         <item quantity="other">%1$d words</item>
     </plurals>
+    <string name="pin_choose_title">Choose a PIN</string>
+    <string name="pin_choose_body">6 digits. You will need it to open BitPocket and as a fallback for signing.</string>
+    <string name="pin_confirm_title">Confirm your PIN</string>
+    <string name="pin_mismatch">The PINs did not match. Choose your PIN again.</string>
+    <string name="pin_save_failed">Could not save the wallet. Make sure the device is unlocked and try again.</string>
+    <string name="pin_creating">Creating your wallet</string>
+    <string name="lock_title">Enter your PIN</string>
+    <string name="lock_wrong">Wrong PIN</string>
+    <string name="lock_locked_out">Too many attempts. Try again in %1$s.</string>
+    <string name="lock_failed">Could not open the wallet. Make sure the device is unlocked and try again.</string>
+    <string name="home_title">Spending</string>
+    <string name="home_placeholder">Balance and activity arrive in the next milestone.</string>
+    <string name="home_lock">Lock</string>
 </resources>

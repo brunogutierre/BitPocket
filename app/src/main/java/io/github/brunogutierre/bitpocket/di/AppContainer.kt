@@ -10,6 +10,9 @@ import io.github.brunogutierre.bitpocket.core.crypto.UnlockService
 import io.github.brunogutierre.bitpocket.core.onboarding.OnboardingDraft
 import io.github.brunogutierre.bitpocket.core.seed.MnemonicService
 import io.github.brunogutierre.bitpocket.core.session.LaunchState
+import io.github.brunogutierre.bitpocket.core.session.Session
+import io.github.brunogutierre.bitpocket.core.session.SlotWalletAccess
+import io.github.brunogutierre.bitpocket.core.session.WalletAccess
 import io.github.brunogutierre.bitpocket.keystore.AndroidUnlockClock
 import io.github.brunogutierre.bitpocket.keystore.KeyAliases
 import io.github.brunogutierre.bitpocket.keystore.KeystoreKeyWrapper
@@ -38,6 +41,11 @@ class AppContainer(
             clock = AndroidUnlockClock(appContext.contentResolver),
         )
     }
+
+    /** The unlocked wallet, in memory only. */
+    val session = Session()
+
+    val walletAccess: WalletAccess by lazy { SlotWalletAccess(slotStore, unlockService, session) }
 
     val mnemonicService: MnemonicService by lazy { MnemonicService() }
 
