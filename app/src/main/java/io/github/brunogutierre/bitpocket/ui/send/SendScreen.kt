@@ -66,6 +66,7 @@ fun SendScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     when (state.stage) {
         SendStage.EDIT -> EditStage(viewModel, state, onBack)
+        SendStage.SCAN -> ScanStage(onScanned = viewModel::onScanned, onCancel = viewModel::cancelScan)
         SendStage.REVIEW -> state.plan?.let { ReviewStage(viewModel, state, it) }
         SendStage.AUTH_BIOMETRIC -> BiometricStage(viewModel, biometricOpener)
         SendStage.AUTH_PIN -> PinStage(viewModel, state)
@@ -108,6 +109,7 @@ private fun EditStage(
             keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, capitalization = KeyboardCapitalization.None),
             modifier = Modifier.fillMaxWidth(),
         )
+        SecondaryButton(stringResource(R.string.send_scan), onClick = viewModel::startScan)
         OutlinedTextField(
             value = if (state.sendMax) "" else state.amountText,
             onValueChange = viewModel::onAmountChange,

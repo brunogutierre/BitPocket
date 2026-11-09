@@ -44,6 +44,9 @@ enum class FeeSpeed { FAST, NORMAL, SLOW }
 
 enum class SendStage {
     EDIT,
+
+    /** The camera looks for a QR code with an address or bitcoin: link. */
+    SCAN,
     REVIEW,
 
     /** The screen shows BiometricPrompt and reports back through [SendViewModel.onBiometricResult]. */
@@ -154,6 +157,17 @@ class SendViewModel(
                 amountText = if (uriAmount != null && it.amountText.isBlank() && !it.sendMax) uriAmount.toString() else it.amountText,
             )
         }
+    }
+
+    fun startScan() = _state.update { it.copy(stage = SendStage.SCAN) }
+
+    fun cancelScan() = _state.update { it.copy(stage = SendStage.EDIT) }
+
+    /** A scanned QR fills the recipient (and an empty amount, for a BIP21 link with one). */
+    fun onScanned(text: String) {
+        if (_state.value.stage != SendStage.SCAN) return
+        _state.update { it.copy(stage = SendStage.EDIT) }
+        onAddressChange(text)
     }
 
     fun onAmountChange(text: String) = _state.update { it.copy(amountText = text, amountError = null, spendError = null) }

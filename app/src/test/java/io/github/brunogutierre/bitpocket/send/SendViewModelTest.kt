@@ -269,6 +269,24 @@ class SendViewModelTest {
         assertFalse(vm.state.value.canConfirm)
     }
 
+    @Test
+    fun `a scanned BIP21 link fills recipient and amount, and cancelling keeps the form`() {
+        val vm = SendViewModel(pocket)
+        vm.onScanned("ignored outside the scanner")
+        assertEquals("", vm.state.value.addressText)
+
+        vm.startScan()
+        assertEquals(SendStage.SCAN, vm.state.value.stage)
+        vm.cancelScan()
+        assertEquals(SendStage.EDIT, vm.state.value.stage)
+
+        vm.startScan()
+        vm.onScanned("bitcoin:$ADDRESS?amount=0.0005")
+        assertEquals(SendStage.EDIT, vm.state.value.stage)
+        assertEquals("bitcoin:$ADDRESS?amount=0.0005", vm.state.value.addressText)
+        assertEquals("50000", vm.state.value.amountText)
+    }
+
     private companion object {
         const val ADDRESS = "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx"
 
