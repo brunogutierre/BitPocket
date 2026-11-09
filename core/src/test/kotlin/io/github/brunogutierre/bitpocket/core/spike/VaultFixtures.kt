@@ -1,30 +1,19 @@
 package io.github.brunogutierre.bitpocket.core.spike
 
+import io.github.brunogutierre.bitpocket.core.testing.ChainFixtures
+import io.github.brunogutierre.bitpocket.core.testing.Funding
 import org.bitcoindevkit.Address
-import org.bitcoindevkit.Anchor
-import org.bitcoindevkit.BlockHash
-import org.bitcoindevkit.BlockId
-import org.bitcoindevkit.ChainChange
-import org.bitcoindevkit.ChangeSet
-import org.bitcoindevkit.ConfirmationBlockTime
 import org.bitcoindevkit.DerivationPath
 import org.bitcoindevkit.Descriptor
 import org.bitcoindevkit.DescriptorSecretKey
-import org.bitcoindevkit.IndexerChangeSet
 import org.bitcoindevkit.KeychainKind
-import org.bitcoindevkit.LocalChainChangeSet
 import org.bitcoindevkit.Mnemonic
-import org.bitcoindevkit.Network
 import org.bitcoindevkit.NetworkKind
-import org.bitcoindevkit.Persistence
 import org.bitcoindevkit.Persister
 import org.bitcoindevkit.Policy
 import org.bitcoindevkit.SatisfiableItem
 import org.bitcoindevkit.SignOptions
-import org.bitcoindevkit.Transaction
-import org.bitcoindevkit.TxGraphChangeSet
 import org.bitcoindevkit.Wallet
-import java.io.ByteArrayOutputStream
 
 /**
  * Keys, descriptors and offline funding for the Vault spike.
@@ -34,12 +23,10 @@ import java.io.ByteArrayOutputStream
  * - HEIR alone can spend once the coin is N blocks old (relative timelock, BIP68/112).
  */
 object VaultFixtures {
-    val NETWORK = Network.SIGNET
+    val NETWORK = ChainFixtures.NETWORK
 
     /** ~1 year of blocks; the relative timelock maximum is 65535 blocks. */
     const val HEIR_TIMELOCK_BLOCKS = 52_560u
-
-    private const val SIGNET_GENESIS = "00000008819873e925422c1ff0f99f7cc9bbb232af63a077a480a3633bee1ef6"
 
     // BIP39 test-vector mnemonics: public, test-only keys.
     val PHONE = VaultKey("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about")
@@ -78,9 +65,7 @@ object VaultFixtures {
 
     /**
      * Offline funding with a CONFIRMED coin: a fake transaction paying [sats] to the first vault
-     * address, anchored in a fake block at [confirmedAt]. `Update` has no public constructor, so
-     * the wallet is loaded (`Wallet.load`) from a hand-built `ChangeSet` through a custom
-     * `Persister`. The input is fictitious: the tx is only good for PSBT building and signing.
+     * address, anchored in a fake block at [confirmedAt] (see [ChainFixtures]).
      *
      * Unconfirmed funding (`Wallet.applyUnconfirmedTxs`) is NOT usable with this policy:
      * see [signOptions].
@@ -105,37 +90,13 @@ object VaultFixtures {
     private fun fundedPersister(
         sats: Long,
         confirmedAt: UInt,
-    ): Persister {
-        val funding = Transaction(fakeFundingTxBytes(firstVaultAddress().scriptPubkey().toBytes(), sats))
-        val tip = BlockId(confirmedAt, BlockHash.fromString("%064x".format(confirmedAt.toLong())))
-        val changeSet =
-            ChangeSet.fromAggregate(
-                descriptor = vaultDescriptor("0").asPublic(),
-                changeDescriptor = vaultDescriptor("1").asPublic(),
-                network = NETWORK,
-                localChain =
-                    LocalChainChangeSet(
-                        listOf(ChainChange(0u, BlockHash.fromString(SIGNET_GENESIS)), ChainChange(tip.height, tip.hash)),
-                    ),
-                txGraph =
-                    TxGraphChangeSet(
-                        txs = listOf(funding),
-                        txouts = emptyMap(),
-                        anchors = listOf(Anchor(ConfirmationBlockTime(tip, confirmationTime = 1u), funding.computeTxid())),
-                        lastSeen = emptyMap(),
-                        firstSeen = emptyMap(),
-                        lastEvicted = emptyMap(),
-                    ),
-                indexer = IndexerChangeSet(emptyMap()),
-            )
-        return Persister.custom(
-            object : Persistence {
-                override fun initialize(): ChangeSet = changeSet
-
-                override fun persist(changeset: ChangeSet) = Unit
-            },
+    ): Persister =
+        ChainFixtures.persister(
+            vaultDescriptor("0"),
+            vaultDescriptor("1"),
+            tipHeight = confirmedAt,
+            fundings = listOf(Funding(firstVaultAddress().scriptPubkey().toBytes(), sats, confirmedAt)),
         )
-    }
 
     /**
      * BDK defaults, plus [assumeHeight] (the chain tip used to evaluate `older()`).
@@ -161,31 +122,6 @@ object VaultFixtures {
     ): Policy = requireNotNull(wallet.policies(keychain))
 
     fun branchesOf(policy: Policy): List<Policy> = (policy.item() as SatisfiableItem.Thresh).items
-
-    /** Legacy (non-witness) serialization: 1 fake input, 1 output, version 2, locktime 0. */
-    private fun fakeFundingTxBytes(
-        scriptPubkey: ByteArray,
-        sats: Long,
-    ): ByteArray =
-        ByteArrayOutputStream()
-            .apply {
-                writeLe(2, 4) // version
-                write(1) // input count
-                write(ByteArray(32) { 0x11 }) // previous txid (fictitious)
-                writeLe(0, 4) // previous vout
-                write(0) // empty scriptSig
-                writeLe(0xFFFFFFFFL, 4) // sequence
-                write(1) // output count
-                writeLe(sats, 8) // value
-                write(scriptPubkey.size) // script length (< 0xFD, fits a 1-byte varint)
-                write(scriptPubkey)
-                writeLe(0, 4) // locktime
-            }.toByteArray()
-
-    private fun ByteArrayOutputStream.writeLe(
-        value: Long,
-        bytes: Int,
-    ) = repeat(bytes) { write(((value shr (8 * it)) and 0xFF).toInt()) }
 }
 
 /** A cosigner key at the BIP48 P2WSH account path m/48'/1'/0'/2' (test coin type). */
