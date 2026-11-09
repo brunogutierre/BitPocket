@@ -70,6 +70,7 @@ A layered-security Bitcoin wallet for Android, built as a study project.
 | Amounts typed in whole sats; minimum 546 sats | No decimal separator to get wrong; above every dust limit | — |
 | Fee estimates fetched directly (any 2xx) | mempool.space answers `/fee-estimates` with HTTP 203, which BDK rejects | — |
 | Session keeps no seed; each signature asks for biometrics or the PIN | A biometric gate means nothing if the seed stays in RAM | [ADR 0004](docs/adr/0004-watch-only-wallets-and-esplora-sync.md) |
+| Security settings in the encrypted slot, changed only after the PIN | Authenticated, per wallet (real or decoy) | [ADR 0005](docs/adr/0005-security-settings-in-the-slot.md) |
 | `androidx.biometric` 1.1.0 stable + `FragmentActivity` | No alpha libraries on the signing path | — |
 | App unit tests use `bdk-jvm` | View models are tested against real BDK validation | [ADR 0001](docs/adr/0001-bdk-on-jvm-for-core-tests.md) |
 
@@ -93,7 +94,7 @@ on every pull request and push to `main`.
 ## Roadmap
 
 - [x] M0 — Bootstrap: build, CI, coverage, `:core` module and BDK de-risking spikes
-- [ ] M1 — Spending wallet: encrypted storage, PIN, onboarding, sync, receive, send with biometrics, history, auto-lock
+- [x] M1 — Spending wallet: encrypted storage, PIN, onboarding, sync, receive, send with biometrics, history, auto-lock
 - [ ] M2 — Safety UX: address fingerprint, guardrails, clipboard/poisoning warnings
 - [ ] M3 — Vault: miniscript 2-of-2 with offline recovery key, encrypted descriptor backup
 - [ ] M4 — Inheritance: heir timelock path and heartbeat refresh
