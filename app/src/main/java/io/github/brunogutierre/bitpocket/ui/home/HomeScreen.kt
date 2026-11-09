@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -44,13 +46,22 @@ fun HomeScreen(
     viewModel: HomeViewModel,
     onReceive: () -> Unit,
     onSend: () -> Unit,
+    onSettings: () -> Unit,
     onTransaction: (txid: String) -> Unit,
     onLocked: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     // Back from Send or Receive: show what changed locally (e.g. a pending send) without a sync.
     LaunchedEffect(Unit) { viewModel.reload() }
-    Scaffold(topBar = { BitPocketTopBar(stringResource(R.string.home_title), viewModel.network) }) { innerPadding ->
+    Scaffold(
+        topBar = {
+            BitPocketTopBar(stringResource(R.string.home_title), viewModel.network, navigationIcon = {
+                IconButton(onClick = onSettings) {
+                    Icon(painterResource(R.drawable.ic_settings), contentDescription = stringResource(R.string.settings_title))
+                }
+            })
+        },
+    ) { innerPadding ->
         PullToRefreshBox(
             isRefreshing = state.syncing,
             onRefresh = viewModel::sync,
