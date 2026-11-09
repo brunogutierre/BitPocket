@@ -2,6 +2,7 @@ package io.github.brunogutierre.bitpocket.core.wallet
 
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
 import io.github.brunogutierre.bitpocket.core.send.FeeOptions
+import io.github.brunogutierre.bitpocket.core.send.SpendPort
 
 /** Balance of a pocket, in satoshis. */
 data class Balance(
@@ -53,10 +54,11 @@ interface ChainPort {
     suspend fun feeRates(): FeeOptions
 }
 
-/** An open pocket: what the UI reads and refreshes. Closed when the session locks. */
+/** An open pocket: what the UI reads, refreshes and spends from. Closed when the session locks. */
 interface PocketWallet :
     WalletPort,
     ChainPort,
+    SpendPort,
     AutoCloseable
 
 /** The chain backend failed (offline, timeout, HTTP error); the user can retry. */

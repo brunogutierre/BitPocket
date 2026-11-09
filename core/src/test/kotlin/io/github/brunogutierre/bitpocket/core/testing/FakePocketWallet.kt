@@ -3,6 +3,10 @@ package io.github.brunogutierre.bitpocket.core.testing
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
 import io.github.brunogutierre.bitpocket.core.seed.SlotPayload
 import io.github.brunogutierre.bitpocket.core.send.FeeOptions
+import io.github.brunogutierre.bitpocket.core.send.SpendError
+import io.github.brunogutierre.bitpocket.core.send.SpendException
+import io.github.brunogutierre.bitpocket.core.send.SpendPlan
+import io.github.brunogutierre.bitpocket.core.send.SpendRequest
 import io.github.brunogutierre.bitpocket.core.wallet.Balance
 import io.github.brunogutierre.bitpocket.core.wallet.ChainUnavailableException
 import io.github.brunogutierre.bitpocket.core.wallet.HistoryItem
@@ -35,6 +39,15 @@ class FakePocketWallet(
     override suspend fun feeRates(): FeeOptions {
         if (offline) throw ChainUnavailableException(RuntimeException("offline"))
         return fees
+    }
+
+    /** Plans handed out by [planSpend]; the request is recorded. Empty = insufficient funds. */
+    val plans = ArrayDeque<SpendPlan>()
+    var lastSpendRequest: SpendRequest? = null
+
+    override suspend fun planSpend(request: SpendRequest): SpendPlan {
+        lastSpendRequest = request
+        return plans.removeFirstOrNull() ?: throw SpendException(SpendError.INSUFFICIENT_FUNDS)
     }
 
     override fun close() {
