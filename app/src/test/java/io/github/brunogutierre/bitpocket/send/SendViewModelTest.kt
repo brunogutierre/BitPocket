@@ -1,20 +1,28 @@
 package io.github.brunogutierre.bitpocket.send
 
 import io.github.brunogutierre.bitpocket.FakePocketWallet
+import io.github.brunogutierre.bitpocket.FakeWalletAccess
 import io.github.brunogutierre.bitpocket.MainDispatcherExtension
+import io.github.brunogutierre.bitpocket.biometric.BiometricFailure
+import io.github.brunogutierre.bitpocket.biometric.BiometricSeedResult
 import io.github.brunogutierre.bitpocket.core.send.AmountError
 import io.github.brunogutierre.bitpocket.core.send.FeeOptions
 import io.github.brunogutierre.bitpocket.core.send.RecipientError
 import io.github.brunogutierre.bitpocket.core.send.SendAmount
 import io.github.brunogutierre.bitpocket.core.send.SpendError
+import io.github.brunogutierre.bitpocket.core.send.SpendException
 import io.github.brunogutierre.bitpocket.core.send.SpendPlan
 import io.github.brunogutierre.bitpocket.core.send.SpendRequest
+import io.github.brunogutierre.bitpocket.core.session.SeedOutcome
+import io.github.brunogutierre.bitpocket.core.wallet.ChainUnavailableException
+import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.RegisterExtension
+import java.time.Duration
 
 class SendViewModelTest {
     @JvmField
@@ -22,7 +30,23 @@ class SendViewModelTest {
     val main = MainDispatcherExtension()
 
     private val pocket = FakePocketWallet().apply { fees = FeeOptions(fast = 9, normal = 4, slow = 1) }
+    private val access = FakeWalletAccess()
     private val plan = SpendPlan("cHNidP8=", ADDRESS, 10_000, 300, 4, 39_700, 1)
+
+    private fun SendViewModel(
+        pocket: FakePocketWallet,
+        biometricSeed: ByteArray? = null,
+    ) = SendViewModel(pocket, access, biometricSeed, main.dispatcher)
+
+    /** A view model already on REVIEW with [plan]. */
+    private fun reviewing(biometricSeed: ByteArray? = null): SendViewModel {
+        pocket.plans += plan
+        return SendViewModel(pocket, biometricSeed).apply {
+            onAddressChange(ADDRESS)
+            onAmountChange("10000")
+            review()
+        }
+    }
 
     @Test
     fun `reviews a valid spend at the chosen fee speed`() {
@@ -107,6 +131,74 @@ class SendViewModelTest {
 
         assertTrue(vm.state.value.canReview)
         assertEquals(4L, vm.state.value.feeRate)
+    }
+
+    @Test
+    fun `without biometrics the PIN unlocks the seed, which is wiped after sending`() {
+        val seed = ByteArray(16) { 5 }
+        access.seedOutcomes += SeedOutcome.Seed(seed)
+        val vm = reviewing()
+
+        vm.confirm()
+        assertEquals(SendStage.AUTH_PIN, vm.state.value.stage)
+        "123456".forEach(vm::pinDigit)
+
+        assertEquals(listOf("123456"), access.signingPins)
+        assertArrayEquals(ByteArray(16) { 5 }, pocket.sentWith.single())
+        assertArrayEquals(ByteArray(16), seed)
+        assertEquals(SendStage.DONE, vm.state.value.stage)
+        assertEquals("txid-1", vm.state.value.txid)
+    }
+
+    @Test
+    fun `a wrong PIN shakes and keeps asking`() {
+        access.seedOutcomes += SeedOutcome.WrongPin(Duration.ZERO)
+        val vm = reviewing()
+        vm.confirm()
+
+        "000000".forEach(vm::pinDigit)
+
+        assertEquals(SendStage.AUTH_PIN, vm.state.value.stage)
+        assertTrue(vm.state.value.wrongPin)
+        assertEquals(1, vm.state.value.pinErrorSignal)
+        assertTrue(pocket.sentWith.isEmpty())
+        vm.cancelAuth()
+        assertEquals(SendStage.REVIEW, vm.state.value.stage)
+    }
+
+    @Test
+    fun `biometrics sign when set up, and fall back to the PIN when they fail`() {
+        val vm = reviewing(biometricSeed = byteArrayOf(1, 2, 3))
+        vm.confirm()
+        assertEquals(SendStage.AUTH_BIOMETRIC, vm.state.value.stage)
+
+        vm.onBiometricResult(BiometricSeedResult.Failed(BiometricFailure.INVALIDATED))
+        assertEquals(SendStage.AUTH_PIN, vm.state.value.stage)
+        assertEquals(BiometricFailure.INVALIDATED, vm.state.value.biometricFailure)
+
+        vm.cancelAuth()
+        vm.confirm()
+        val seed = ByteArray(16) { 8 }
+        vm.onBiometricResult(BiometricSeedResult.Opened(seed))
+        assertEquals(SendStage.DONE, vm.state.value.stage)
+        assertArrayEquals(ByteArray(16), seed)
+    }
+
+    @Test
+    fun `an unreachable backend returns to review and says nothing was sent`() {
+        pocket.sendError = ChainUnavailableException(RuntimeException("offline"))
+        val vm = reviewing(biometricSeed = byteArrayOf(1))
+        vm.confirm()
+
+        vm.onBiometricResult(BiometricSeedResult.Opened(ByteArray(16)))
+
+        assertEquals(SendStage.REVIEW, vm.state.value.stage)
+        assertTrue(vm.state.value.broadcastFailed)
+        pocket.sendError = SpendException(SpendError.REJECTED)
+        vm.confirm()
+        vm.onBiometricResult(BiometricSeedResult.Opened(ByteArray(16)))
+        assertEquals(SpendError.REJECTED, vm.state.value.spendError)
+        assertFalse(vm.state.value.broadcastFailed)
     }
 
     private companion object {

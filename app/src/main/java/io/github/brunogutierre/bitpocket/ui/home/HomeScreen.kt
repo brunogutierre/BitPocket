@@ -16,6 +16,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -47,6 +48,8 @@ fun HomeScreen(
     onLocked: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    // Back from Send or Receive: show what changed locally (e.g. a pending send) without a sync.
+    LaunchedEffect(Unit) { viewModel.reload() }
     Scaffold(topBar = { BitPocketTopBar(stringResource(R.string.home_title), viewModel.network) }) { innerPadding ->
         PullToRefreshBox(
             isRefreshing = state.syncing,

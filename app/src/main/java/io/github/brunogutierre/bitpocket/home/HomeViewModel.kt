@@ -54,6 +54,11 @@ class HomeViewModel(
         }
     }
 
+    /** Re-reads the saved balance and history (no network). */
+    fun reload() {
+        viewModelScope.launch { readWallet() }
+    }
+
     fun lock() = lockSession()
 
     private suspend fun readWallet() {

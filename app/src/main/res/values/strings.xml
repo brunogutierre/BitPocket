@@ -117,5 +117,15 @@
     <string name="send_review_check_body">Bitcoin transactions cannot be reversed. Compare the address with the recipient through another channel.</string>
     <string name="send_confirm">Confirm and send</string>
     <string name="send_edit">Edit</string>
+    <string name="sign_biometric_title">Confirm with your fingerprint</string>
+    <string name="sign_use_pin">Use PIN</string>
+    <string name="sign_pin_title">Enter your PIN to send</string>
+    <string name="sign_pin_body">Your PIN unlocks the keys for this transaction only.</string>
+    <string name="sign_biometric_invalidated">Your fingerprints changed, so biometric signing was turned off. Enter your PIN, then turn it on again in Settings.</string>
+    <string name="sign_sending">Signing and sending</string>
+    <string name="sign_broadcast_failed">Could not reach the network, so nothing was sent. Check your connection and confirm again.</string>
+    <string name="sign_done_title">Sent</string>
+    <string name="sign_done_body">The transaction was broadcast. It shows as pending until a block confirms it.</string>
+    <string name="sign_done">Done</string>
     <string name="pin_too_weak">PIN too easy to guess. Choose another one.</string>
 </resources>

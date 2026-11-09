@@ -2,6 +2,9 @@ package io.github.brunogutierre.bitpocket.send
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.brunogutierre.bitpocket.biometric.BiometricFailure
+import io.github.brunogutierre.bitpocket.biometric.BiometricSeedResult
+import io.github.brunogutierre.bitpocket.core.crypto.wipe
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
 import io.github.brunogutierre.bitpocket.core.send.AmountError
 import io.github.brunogutierre.bitpocket.core.send.AmountParser
@@ -15,17 +18,35 @@ import io.github.brunogutierre.bitpocket.core.send.SpendError
 import io.github.brunogutierre.bitpocket.core.send.SpendException
 import io.github.brunogutierre.bitpocket.core.send.SpendPlan
 import io.github.brunogutierre.bitpocket.core.send.SpendRequest
+import io.github.brunogutierre.bitpocket.core.session.SeedOutcome
+import io.github.brunogutierre.bitpocket.core.session.WalletAccess
 import io.github.brunogutierre.bitpocket.core.wallet.ChainUnavailableException
 import io.github.brunogutierre.bitpocket.core.wallet.PocketWallet
+import io.github.brunogutierre.bitpocket.security.PinBuffer
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.time.Duration
 
 enum class FeeSpeed { FAST, NORMAL, SLOW }
 
-enum class SendStage { EDIT, REVIEW }
+enum class SendStage {
+    EDIT,
+    REVIEW,
+
+    /** The screen shows BiometricPrompt and reports back through [SendViewModel.onBiometricResult]. */
+    AUTH_BIOMETRIC,
+    AUTH_PIN,
+    SENDING,
+    DONE,
+}
 
 data class SendUiState(
     val stage: SendStage = SendStage.EDIT,
@@ -40,7 +61,20 @@ data class SendUiState(
     val spendError: SpendError? = null,
     val planning: Boolean = false,
     val plan: SpendPlan? = null,
+    val pinEntered: Int = 0,
+    val pinVerifying: Boolean = false,
+    val wrongPin: Boolean = false,
+    val pinErrorSignal: Int = 0,
+    val lockoutSeconds: Long = 0,
+    val authFailed: Boolean = false,
+    /** Why biometrics fell back to the PIN, if they did. */
+    val biometricFailure: BiometricFailure? = null,
+    /** The last send attempt could not reach the backend: nothing was sent. */
+    val broadcastFailed: Boolean = false,
+    val txid: String? = null,
 ) {
+    val pinKeysEnabled: Boolean get() = !pinVerifying && lockoutSeconds == 0L
+
     val feeRate: Long? get() = fees?.rateFor(speed)
     val canReview: Boolean get() = fees != null && !planning
 }
@@ -54,15 +88,22 @@ fun FeeOptions.rateFor(speed: FeeSpeed): Long =
 
 /**
  * Send flow: EDIT (recipient, amount, fee speed) builds a [SpendPlan], REVIEW shows exactly what
- * will leave the wallet. Inputs are validated only when the user asks to review, so typing is
- * never interrupted by errors.
+ * will leave the wallet, then the seed is obtained for this one signature (biometrics when set up,
+ * else the PIN), the plan is signed, checked and broadcast, and the seed is wiped.
+ * Inputs are validated only when the user asks to review, so typing is never interrupted.
  */
 class SendViewModel(
     private val pocket: PocketWallet,
+    private val walletAccess: WalletAccess,
+    /** The session's biometric-sealed seed, or null when biometric signing is off. */
+    val biometricSeed: ByteArray?,
+    private val workDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
     val network: SupportedNetwork = pocket.network
     private val _state = MutableStateFlow(SendUiState())
     val state: StateFlow<SendUiState> = _state.asStateFlow()
+    private val pin = PinBuffer()
+    private var countdown: Job? = null
 
     init {
         loadFees()
@@ -125,5 +166,106 @@ class SendViewModel(
     }
 
     /** From REVIEW back to EDIT, keeping what was typed. */
-    fun edit() = _state.update { it.copy(stage = SendStage.EDIT, plan = null) }
+    fun edit() = _state.update { it.copy(stage = SendStage.EDIT, plan = null, broadcastFailed = false, spendError = null) }
+
+    /** "Confirm and send" on REVIEW. */
+    fun confirm() {
+        if (_state.value.plan == null) return
+        val stage = if (biometricSeed != null) SendStage.AUTH_BIOMETRIC else SendStage.AUTH_PIN
+        _state.update { it.copy(stage = stage, broadcastFailed = false, spendError = null, biometricFailure = null, authFailed = false) }
+    }
+
+    /** Leaves authentication without signing. */
+    fun cancelAuth() {
+        pin.clear()
+        _state.update { it.copy(stage = SendStage.REVIEW, pinEntered = 0, wrongPin = false) }
+    }
+
+    fun onBiometricResult(result: BiometricSeedResult) {
+        if (_state.value.stage != SendStage.AUTH_BIOMETRIC) return
+        when (result) {
+            is BiometricSeedResult.Opened -> sign(result.entropy)
+            is BiometricSeedResult.Failed -> _state.update { it.copy(stage = SendStage.AUTH_PIN, biometricFailure = result.reason) }
+        }
+    }
+
+    fun pinDigit(digit: Char) {
+        if (_state.value.stage != SendStage.AUTH_PIN || !_state.value.pinKeysEnabled) return
+        pin.append(digit)
+        _state.update { it.copy(pinEntered = pin.size, wrongPin = false, authFailed = false) }
+        if (pin.isFull) verifyPin()
+    }
+
+    fun pinBackspace() {
+        pin.removeLast()
+        _state.update { it.copy(pinEntered = pin.size) }
+    }
+
+    private fun verifyPin() {
+        val attempt = pin.toCharArray()
+        pin.clear()
+        _state.update { it.copy(pinVerifying = true) }
+        viewModelScope.launch {
+            val outcome =
+                try {
+                    withContext(workDispatcher) { walletAccess.seedForSigning(attempt) }
+                } finally {
+                    attempt.wipe()
+                }
+            _state.update { it.copy(pinVerifying = false, pinEntered = 0) }
+            when (outcome) {
+                is SeedOutcome.Seed -> {
+                    sign(outcome.entropy)
+                }
+
+                is SeedOutcome.WrongPin -> {
+                    _state.update { it.copy(wrongPin = true, pinErrorSignal = it.pinErrorSignal + 1) }
+                    startCountdown(outcome.lockout)
+                }
+
+                is SeedOutcome.LockedOut -> {
+                    startCountdown(outcome.remaining)
+                }
+
+                SeedOutcome.Failed -> {
+                    _state.update { it.copy(authFailed = true) }
+                }
+            }
+        }
+    }
+
+    /** Signs, checks and broadcasts; the seed is wiped whatever happens. */
+    private fun sign(entropy: ByteArray) {
+        val plan = _state.value.plan ?: return entropy.wipe()
+        _state.update { it.copy(stage = SendStage.SENDING) }
+        viewModelScope.launch {
+            try {
+                val txid = pocket.send(plan, entropy)
+                _state.update { it.copy(stage = SendStage.DONE, txid = txid) }
+            } catch (e: SpendException) {
+                _state.update { it.copy(stage = SendStage.REVIEW, spendError = e.error) }
+            } catch (e: ChainUnavailableException) {
+                _state.update { it.copy(stage = SendStage.REVIEW, broadcastFailed = true) }
+            } finally {
+                entropy.wipe()
+            }
+        }
+    }
+
+    private fun startCountdown(duration: Duration) {
+        if (duration.isZero) return
+        countdown?.cancel()
+        countdown =
+            viewModelScope.launch {
+                var seconds = (duration.toMillis() + 999) / 1000
+                while (seconds > 0) {
+                    _state.update { it.copy(lockoutSeconds = seconds) }
+                    delay(1000)
+                    seconds--
+                }
+                _state.update { it.copy(lockoutSeconds = 0) }
+            }
+    }
+
+    override fun onCleared() = pin.clear()
 }
