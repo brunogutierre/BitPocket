@@ -16,7 +16,13 @@ data class SpendingStats(
 
 enum class BlockReason { PER_TX_LIMIT, WINDOW_LIMIT }
 
-enum class ConfirmReason { NEW_RECIPIENT, LARGE_SHARE }
+enum class ConfirmReason {
+    NEW_RECIPIENT,
+    LARGE_SHARE,
+
+    /** The recipient looks like a known address without being it (possible address poisoning). */
+    LOOKALIKE,
+}
 
 sealed interface GuardrailVerdict {
     data object Allowed : GuardrailVerdict
@@ -50,6 +56,8 @@ object GuardrailCheck {
             buildSet {
                 if (guardrails.confirmNewRecipients && plan.recipient !in stats.pastRecipients) add(ConfirmReason.NEW_RECIPIENT)
                 if (guardrails.confirmLargeShare && plan.totalSats * 2 > stats.balanceSats) add(ConfirmReason.LARGE_SHARE)
+                // Always on: not a guardrail the user can turn off.
+                if (Lookalike.find(plan.recipient, stats.pastRecipients + stats.ownAddresses) != null) add(ConfirmReason.LOOKALIKE)
             }
         return if (reasons.isEmpty()) GuardrailVerdict.Allowed else GuardrailVerdict.NeedsConfirmation(reasons)
     }

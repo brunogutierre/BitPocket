@@ -1,5 +1,7 @@
 package io.github.brunogutierre.bitpocket.ui.send
 
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -22,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
@@ -77,6 +80,7 @@ private fun EditStage(
     state: SendUiState,
     onBack: () -> Unit,
 ) {
+    val context = LocalContext.current
     PageScaffold(
         title = stringResource(R.string.send_title),
         onBack = onBack,
@@ -94,6 +98,10 @@ private fun EditStage(
             value = state.addressText,
             onValueChange = viewModel::onAddressChange,
             label = { Text(stringResource(R.string.send_address_label)) },
+            trailingIcon = {
+                // The clipboard is read only when the user asks for it.
+                TextButton(onClick = { pasteText(context)?.let(viewModel::onAddressChange) }) { Text(stringResource(R.string.send_paste)) }
+            },
             isError = state.addressError != null,
             supportingText = state.addressError?.let { { Text(stringResource(it.message())) } },
             textStyle = MaterialTheme.monoTypography.small,
@@ -245,11 +253,19 @@ private fun GuardrailNotice(
         }
 
         is GuardrailVerdict.NeedsConfirmation -> {
+            state.lookalikeOf?.let { known ->
+                WarningBanner(
+                    stringResource(R.string.lookalike_title),
+                    stringResource(R.string.lookalike_body, BitcoinFormat.addressChunks(known).joinToString(" ")),
+                    severity = BannerSeverity.ERROR,
+                )
+            }
             verdict.reasons.sorted().forEach { reason ->
                 val text =
                     when (reason) {
                         ConfirmReason.NEW_RECIPIENT -> R.string.guardrail_confirm_new_recipient
                         ConfirmReason.LARGE_SHARE -> R.string.guardrail_confirm_large_share
+                        ConfirmReason.LOOKALIKE -> R.string.guardrail_confirm_lookalike
                     }
                 val checked = reason in state.acknowledged
                 Row(
@@ -334,3 +350,12 @@ private fun spendErrorText(error: SpendError): String =
             )
         }
     }
+
+private fun pasteText(context: Context): String? =
+    context
+        .getSystemService(ClipboardManager::class.java)
+        .primaryClip
+        ?.takeIf { it.itemCount > 0 }
+        ?.getItemAt(0)
+        ?.coerceToText(context)
+        ?.toString()

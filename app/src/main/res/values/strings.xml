@@ -185,5 +185,9 @@
     <string name="guardrails_scheduled_body">The looser limits apply from block %1$d (about a day). Until then the stricter values stay in force.</string>
     <string name="guardrails_sync_title">Sync first</string>
     <string name="guardrails_sync_body">Loosening a limit counts 144 blocks from the current chain height. Open Home and let it sync, then try again.</string>
+    <string name="send_paste">Paste</string>
+    <string name="lookalike_title">Possible address poisoning</string>
+    <string name="lookalike_body">This address starts and ends like one you know, but it is different:\n%1$s\nAttackers send tiny amounts from such addresses hoping they get copied. Check the whole address.</string>
+    <string name="guardrail_confirm_lookalike">I checked every character of this address with the recipient.</string>
     <string name="pin_too_weak">PIN too easy to guess. Choose another one.</string>
 </resources>
