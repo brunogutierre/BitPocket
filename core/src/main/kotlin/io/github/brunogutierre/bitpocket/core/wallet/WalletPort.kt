@@ -1,6 +1,7 @@
 package io.github.brunogutierre.bitpocket.core.wallet
 
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
+import io.github.brunogutierre.bitpocket.core.send.FeeOptions
 
 /** Balance of a pocket, in satoshis. */
 data class Balance(
@@ -43,10 +44,13 @@ interface WalletPort {
     }
 }
 
-/** The chain backend of a wallet (Esplora). Fee rates and broadcast arrive with sending. */
+/** The chain backend of a wallet (Esplora). Calls throw [ChainUnavailableException] when it cannot be reached. */
 interface ChainPort {
-    /** Fetches new chain data. Throws [ChainUnavailableException] when the backend cannot be reached. */
+    /** Fetches new chain data. */
     suspend fun sync()
+
+    /** Current fee rates for fast, normal and slow confirmation. */
+    suspend fun feeRates(): FeeOptions
 }
 
 /** An open pocket: what the UI reads and refreshes. Closed when the session locks. */

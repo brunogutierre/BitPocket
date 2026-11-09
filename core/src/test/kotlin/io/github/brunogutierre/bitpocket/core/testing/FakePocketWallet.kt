@@ -2,7 +2,9 @@ package io.github.brunogutierre.bitpocket.core.testing
 
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
 import io.github.brunogutierre.bitpocket.core.seed.SlotPayload
+import io.github.brunogutierre.bitpocket.core.send.FeeOptions
 import io.github.brunogutierre.bitpocket.core.wallet.Balance
+import io.github.brunogutierre.bitpocket.core.wallet.ChainUnavailableException
 import io.github.brunogutierre.bitpocket.core.wallet.HistoryItem
 import io.github.brunogutierre.bitpocket.core.wallet.PocketWallet
 import io.github.brunogutierre.bitpocket.core.wallet.ReceiveAddress
@@ -12,6 +14,7 @@ class FakePocketWallet(
     override val network: SupportedNetwork = SupportedNetwork.SIGNET,
 ) : PocketWallet {
     var closed = false
+    var offline = false
 
     override suspend fun balance() = Balance(0, 0)
 
@@ -26,6 +29,13 @@ class FakePocketWallet(
     override suspend fun transaction(txid: String) = historyItems.firstOrNull { it.txid == txid }
 
     override suspend fun sync() = Unit
+
+    var fees = FeeOptions(fast = 5, normal = 2, slow = 1)
+
+    override suspend fun feeRates(): FeeOptions {
+        if (offline) throw ChainUnavailableException(RuntimeException("offline"))
+        return fees
+    }
 
     override fun close() {
         closed = true

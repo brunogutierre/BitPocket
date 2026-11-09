@@ -1,6 +1,7 @@
 package io.github.brunogutierre.bitpocket
 
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
+import io.github.brunogutierre.bitpocket.core.send.FeeOptions
 import io.github.brunogutierre.bitpocket.core.wallet.Balance
 import io.github.brunogutierre.bitpocket.core.wallet.ChainUnavailableException
 import io.github.brunogutierre.bitpocket.core.wallet.HistoryItem
@@ -39,6 +40,13 @@ class FakePocketWallet(
         syncGate?.await()
         if (offline) throw ChainUnavailableException(RuntimeException("offline"))
         balanceAfterSync?.let { balance = it }
+    }
+
+    var fees = FeeOptions(fast = 5, normal = 2, slow = 1)
+
+    override suspend fun feeRates(): FeeOptions {
+        if (offline) throw ChainUnavailableException(RuntimeException("offline"))
+        return fees
     }
 
     override fun close() {

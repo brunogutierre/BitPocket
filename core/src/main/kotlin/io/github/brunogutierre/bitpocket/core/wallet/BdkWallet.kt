@@ -1,6 +1,8 @@
 package io.github.brunogutierre.bitpocket.core.wallet
 
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
+import io.github.brunogutierre.bitpocket.core.send.FeeOptions
+import io.github.brunogutierre.bitpocket.core.send.FeePolicy
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -17,6 +19,7 @@ import org.bitcoindevkit.Persister
 import org.bitcoindevkit.Txid
 import org.bitcoindevkit.Wallet
 import java.io.File
+import java.io.IOException
 
 /**
  * A watch-only BDK wallet: public descriptors only, persisted in SQLite. Private keys never reach
@@ -116,6 +119,15 @@ class BdkWallet internal constructor(
 
     @Volatile
     private var closed = false
+
+    override suspend fun feeRates(): FeeOptions =
+        onWallet {
+            try {
+                FeePolicy.fromEstimates(chain.feeEstimates())
+            } catch (e: IOException) {
+                throw ChainUnavailableException(e)
+            }
+        }
 
     override fun close() {
         closed = true
