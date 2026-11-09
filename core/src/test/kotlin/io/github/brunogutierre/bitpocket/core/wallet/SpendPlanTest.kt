@@ -16,6 +16,7 @@ import org.bitcoindevkit.Psbt
 import org.bitcoindevkit.TxBuilder
 import org.bitcoindevkit.Wallet
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -89,6 +90,18 @@ class SpendPlanTest {
                 SpendError.INVALID_ADDRESS,
                 assertThrows<SpendException> { wallet.planSpend(request(SendAmount.Exact(1_000), "nope")) }.error,
             )
+        }
+
+    @Test
+    fun `only the wallet seed signs, with keys that exist only for the call`() =
+        runTest {
+            val plan = wallet.planSpend(request(SendAmount.Exact(10_000)))
+
+            Psbt(plan.psbtBase64).use { psbt ->
+                assertFalse(SeedSigner.sign(bdkWallet, psbt, ByteArray(16) { 7 }, network), "another seed must not sign")
+                assertTrue(SeedSigner.sign(bdkWallet, psbt, ByteArray(16), network))
+                assertEquals(1, psbt.extractTx().input().size)
+            }
         }
 
     @Test
