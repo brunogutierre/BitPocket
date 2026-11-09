@@ -64,6 +64,7 @@ dependencies {
     implementation(project(":core"))
     implementation(libs.bdk.android)
     implementation(libs.androidx.biometric)
+    implementation(libs.androidx.fragment)
     implementation(libs.androidx.navigation3.runtime)
     implementation(libs.androidx.navigation3.ui)
     implementation(libs.androidx.lifecycle.viewmodel.navigation3)

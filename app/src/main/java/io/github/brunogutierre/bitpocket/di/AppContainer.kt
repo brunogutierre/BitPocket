@@ -1,6 +1,8 @@
 package io.github.brunogutierre.bitpocket.di
 
 import android.content.Context
+import io.github.brunogutierre.bitpocket.biometric.BiometricSeedOpener
+import io.github.brunogutierre.bitpocket.biometric.SeedCipher
 import io.github.brunogutierre.bitpocket.core.crypto.Argon2idKdf
 import io.github.brunogutierre.bitpocket.core.crypto.FileAttemptsStore
 import io.github.brunogutierre.bitpocket.core.crypto.FileSlotStorage
@@ -53,6 +55,9 @@ class AppContainer(
     val walletAccess: WalletAccess by lazy { SlotWalletAccess(slotStore, unlockService, session, walletOpener) }
 
     val mnemonicService: MnemonicService by lazy { MnemonicService() }
+
+    /** Opens the biometric-sealed seed for signing (Keystore key created on first use). */
+    val biometricSeedOpener: BiometricSeedOpener by lazy { BiometricSeedOpener(SeedCipher()) }
 
     /** The wallet being created or restored; memory only. */
     val onboardingDraft = OnboardingDraft()
