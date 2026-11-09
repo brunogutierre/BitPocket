@@ -1,6 +1,7 @@
 package io.github.brunogutierre.bitpocket.lock
 
 import app.cash.turbine.test
+import io.github.brunogutierre.bitpocket.FakePocketWallet
 import io.github.brunogutierre.bitpocket.FakeWalletAccess
 import io.github.brunogutierre.bitpocket.MainDispatcherExtension
 import io.github.brunogutierre.bitpocket.core.crypto.SlotId
@@ -87,7 +88,7 @@ class LockViewModelTest {
     @Test
     fun `home shows the session network and locks it`() {
         val session = Session()
-        session.open(UnlockedWallet(SlotId.A, SlotPayload(ByteArray(16), null, SupportedNetwork.TESTNET4)))
+        session.open(UnlockedWallet(SlotId.A, SlotPayload(ByteArray(16), null, SupportedNetwork.TESTNET4), FakePocketWallet()))
         val home = HomeViewModel(session)
 
         assertEquals(SupportedNetwork.TESTNET4, home.network)

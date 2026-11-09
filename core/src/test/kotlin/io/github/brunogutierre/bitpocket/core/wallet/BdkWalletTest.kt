@@ -1,6 +1,7 @@
 package io.github.brunogutierre.bitpocket.core.wallet
 
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
+import io.github.brunogutierre.bitpocket.core.seed.SlotPayload
 import io.github.brunogutierre.bitpocket.core.testing.ChainFixtures
 import io.github.brunogutierre.bitpocket.core.testing.Funding
 import kotlinx.coroutines.Dispatchers
@@ -84,11 +85,28 @@ class BdkWalletTest {
         }
 
     @Test
-    fun `closing the wallet closes its chain client`() {
-        BdkWallet.open(dir, descriptors, network, chain).close()
+    fun `closing the wallet closes its chain client and stops later calls`() =
+        runTest {
+            val wallet = BdkWallet.open(dir, descriptors, network, chain, Dispatchers.Unconfined)
 
-        assertTrue(chain.closed)
-    }
+            wallet.close()
+
+            assertTrue(chain.closed)
+            assertThrows<WalletClosedException> { wallet.balance() }
+        }
+
+    @Test
+    fun `the opener derives the wallet directory from public data`() =
+        runTest {
+            val opener = BdkWalletOpener(dir) { chain }
+            val payload = SlotPayload(ByteArray(16), biometricSeed = null, network = network)
+
+            opener.open(payload).use { wallet ->
+                assertEquals(FIRST_ADDRESS, wallet.nextReceiveAddress().address)
+            }
+            val id = WalletFiles.id(network, descriptors)
+            assertTrue(File(dir, "wallets/$id/spending.sqlite").isFile)
+        }
 
     @Test
     fun `public descriptors hold no private keys and wallet ids depend on the network`() {

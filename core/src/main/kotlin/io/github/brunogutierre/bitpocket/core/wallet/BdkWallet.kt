@@ -1,8 +1,11 @@
 package io.github.brunogutierre.bitpocket.core.wallet
 
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoindevkit.Descriptor
 import org.bitcoindevkit.EsploraException
@@ -18,7 +21,9 @@ import java.io.File
  * it; spending signs with short-lived signers (ADR 0004).
  *
  * BDK objects are not meant for concurrent use, so every call runs on [dispatcher], one at a
- * time (by default a per-wallet view of `Dispatchers.IO` with parallelism 1).
+ * time (by default a per-wallet view of `Dispatchers.IO` with parallelism 1). [close] is queued
+ * on the same dispatcher, so native objects are never freed in the middle of a call (a sync can
+ * still be running when the user locks the app).
  */
 class BdkWallet internal constructor(
     private val wallet: Wallet,
@@ -61,13 +66,23 @@ class BdkWallet internal constructor(
             Unit
         }
 
+    @Volatile
+    private var closed = false
+
     override fun close() {
-        chain.close()
-        wallet.close()
-        persister.close()
+        closed = true
+        CoroutineScope(dispatcher).launch {
+            chain.close()
+            wallet.close()
+            persister.close()
+        }
     }
 
-    private suspend fun <T> onWallet(block: () -> T): T = withContext(dispatcher) { block() }
+    private suspend fun <T> onWallet(block: () -> T): T =
+        withContext(dispatcher) {
+            if (closed) throw WalletClosedException()
+            block()
+        }
 
     companion object {
         private const val DB_FILE = "spending.sqlite"
@@ -82,15 +97,16 @@ class BdkWallet internal constructor(
             descriptors: PublicDescriptors,
             network: SupportedNetwork,
             chain: ChainClient,
+            dispatcher: CoroutineDispatcher = serialIoDispatcher(),
         ): BdkWallet {
             check(dir.isDirectory || dir.mkdirs()) { "Cannot create $dir" }
             val db = File(dir, DB_FILE)
             val kind = network.toBdkNetworkKind()
             return Descriptor(descriptors.external, kind).use { external ->
                 Descriptor(descriptors.internal, kind).use { internal ->
-                    loadOrNull(db, external, internal, network, chain)
+                    loadOrNull(db, external, internal) { wallet, persister -> BdkWallet(wallet, persister, network, chain, dispatcher) }
                         ?: Persister.newSqlite(db.path).let { persister ->
-                            BdkWallet(Wallet(external, internal, network.toBdkNetwork(), persister), persister, network, chain)
+                            BdkWallet(Wallet(external, internal, network.toBdkNetwork(), persister), persister, network, chain, dispatcher)
                         }
                 }
             }
@@ -100,14 +116,13 @@ class BdkWallet internal constructor(
             db: File,
             external: Descriptor,
             internal: Descriptor,
-            network: SupportedNetwork,
-            chain: ChainClient,
+            wrap: (Wallet, Persister) -> BdkWallet,
         ): BdkWallet? {
             if (!db.exists()) return null
             var persister: Persister? = null
             return try {
                 persister = Persister.newSqlite(db.path)
-                BdkWallet(Wallet.load(external, internal, persister), persister, network, chain)
+                wrap(Wallet.load(external, internal, persister), persister)
             } catch (e: LoadWithPersistException) {
                 discard(db, persister)
             } catch (e: PersistenceException) {
@@ -128,3 +143,6 @@ class BdkWallet internal constructor(
         fun serialIoDispatcher(): CoroutineDispatcher = Dispatchers.IO.limitedParallelism(1)
     }
 }
+
+/** A call reached a wallet after the session locked; it ends the caller's coroutine silently. */
+class WalletClosedException : CancellationException("Wallet closed")
