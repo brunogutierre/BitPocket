@@ -53,7 +53,9 @@ class SendTest {
     @Test
     fun `spending stats count recent sends and remember their recipients`() =
         runTest {
-            assertEquals(SpendingStats(105, 0, emptySet(), 50_000), wallet.spendingStats(144))
+            val before = wallet.spendingStats(144)
+            assertEquals(SpendingStats(105, 0, emptySet(), 50_000, before.ownAddresses), before)
+            assertTrue(FIRST_ADDRESS in before.ownAddresses)
 
             val plan = plan()
             wallet.send(plan, SEED.copyOf())
@@ -101,5 +103,8 @@ class SendTest {
     private companion object {
         val SEED = ByteArray(16)
         const val RECIPIENT = "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx"
+
+        // m/86'/1'/0'/0/0 of the all-zero seed: funded by the fixture, so it is revealed.
+        const val FIRST_ADDRESS = "tb1p8wpt9v4frpf3tkn0srd97pksgsxc5hs52lafxwru9kgeephvs7rqlqt9zj"
     }
 }

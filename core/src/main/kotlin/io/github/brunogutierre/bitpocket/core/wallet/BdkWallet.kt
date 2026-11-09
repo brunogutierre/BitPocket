@@ -116,8 +116,14 @@ class BdkWallet internal constructor(
                 spentInWindowSats = spent,
                 pastRecipients = recipients,
                 balanceSats = (balance.confirmed.toSat() + balance.trustedPending.toSat() + balance.untrustedPending.toSat()).toLong(),
+                ownAddresses = revealedReceiveAddresses(),
             )
         }
+
+    private fun revealedReceiveAddresses(): Set<String> {
+        val last = wallet.derivationIndex(KeychainKind.EXTERNAL) ?: return emptySet()
+        return (0u..last).map { wallet.peekAddress(KeychainKind.EXTERNAL, it).address.toString() }.toSet()
+    }
 
     private fun historyItem(
         txid: Txid,
