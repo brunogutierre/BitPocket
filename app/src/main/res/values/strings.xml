@@ -1,4 +1,4 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name">BitPocket</string>
     <string name="tagline">Signet/Testnet4 study wallet</string>
     <string name="warning_not_audited">Study project. Mainnet is disabled by design. Not audited.</string>
@@ -74,5 +74,13 @@
         <item quantity="one">%1$d confirmation</item>
         <item quantity="other">%1$d confirmations</item>
     </plurals>
+    <string name="tx_title">Transaction</string>
+    <string name="tx_status">Status</string>
+    <string name="tx_fee">Network fee</string>
+    <!-- sat/vB is a unit symbol, not a countable noun. -->
+    <string name="tx_fee_rate" tools:ignore="PluralsCandidate">" (%1$d sat/vB)"</string>
+    <string name="tx_id">Transaction ID</string>
+    <string name="tx_open_explorer">View on mempool.space</string>
+    <string name="tx_not_found">This transaction is no longer in the wallet. An unconfirmed transaction can be replaced or dropped.</string>
     <string name="pin_too_weak">PIN too easy to guess. Choose another one.</string>
 </resources>

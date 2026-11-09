@@ -12,10 +12,22 @@ import org.bitcoindevkit.NetworkKind
 enum class SupportedNetwork(
     val displayName: String,
     val esploraBaseUrl: String,
+    val explorerBaseUrl: String,
 ) {
-    SIGNET(displayName = "Signet", esploraBaseUrl = "https://mempool.space/signet/api"),
-    TESTNET4(displayName = "Testnet4", esploraBaseUrl = "https://mempool.space/testnet4/api"),
+    SIGNET(
+        displayName = "Signet",
+        esploraBaseUrl = "https://mempool.space/signet/api",
+        explorerBaseUrl = "https://mempool.space/signet",
+    ),
+    TESTNET4(
+        displayName = "Testnet4",
+        esploraBaseUrl = "https://mempool.space/testnet4/api",
+        explorerBaseUrl = "https://mempool.space/testnet4",
+    ),
     ;
+
+    /** Block explorer page of a transaction on this network. */
+    fun explorerTxUrl(txid: String): String = "$explorerBaseUrl/tx/$txid"
 
     fun toBdkNetwork(): Network =
         when (this) {

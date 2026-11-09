@@ -1,5 +1,6 @@
 package io.github.brunogutierre.bitpocket.ui.home
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -40,6 +41,7 @@ import io.github.brunogutierre.bitpocket.ui.theme.screenHorizontalPadding
 fun HomeScreen(
     viewModel: HomeViewModel,
     onReceive: () -> Unit,
+    onTransaction: (txid: String) -> Unit,
     onLocked: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -71,7 +73,7 @@ fun HomeScreen(
                         )
                     }
                 }
-                items(state.history, key = { it.txid }) { item -> TransactionRow(item) }
+                items(state.history, key = { it.txid }) { item -> TransactionRow(item, Modifier.clickable { onTransaction(item.txid) }) }
                 item {
                     SecondaryButton(stringResource(R.string.home_lock), onClick = {
                         viewModel.lock()

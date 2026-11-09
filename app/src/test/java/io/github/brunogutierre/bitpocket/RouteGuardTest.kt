@@ -6,6 +6,7 @@ import io.github.brunogutierre.bitpocket.ui.navigation.Lock
 import io.github.brunogutierre.bitpocket.ui.navigation.Receive
 import io.github.brunogutierre.bitpocket.ui.navigation.RestoreSeed
 import io.github.brunogutierre.bitpocket.ui.navigation.SetPin
+import io.github.brunogutierre.bitpocket.ui.navigation.TransactionDetails
 import io.github.brunogutierre.bitpocket.ui.navigation.VerifySeed
 import io.github.brunogutierre.bitpocket.ui.navigation.Welcome
 import io.github.brunogutierre.bitpocket.ui.navigation.guardRoute
@@ -19,6 +20,7 @@ class RouteGuardTest {
         fun afterDeath(route: androidx.navigation3.runtime.NavKey) = guardRoute(route, true, false, false, false)
         assertEquals(Lock, afterDeath(Home))
         assertEquals(Lock, afterDeath(Receive))
+        assertEquals(Lock, afterDeath(TransactionDetails("ab")))
         assertEquals(Lock, afterDeath(Welcome))
         assertEquals(Lock, afterDeath(SetPin))
 
@@ -30,5 +32,6 @@ class RouteGuardTest {
         assertEquals(Welcome, guardRoute(Lock, false, false, false, false))
         assertEquals(Home, guardRoute(Home, true, true, false, false))
         assertEquals(Receive, guardRoute(Receive, true, true, false, false))
+        assertEquals(TransactionDetails("ab"), guardRoute(TransactionDetails("ab"), true, true, false, false))
     }
 }
