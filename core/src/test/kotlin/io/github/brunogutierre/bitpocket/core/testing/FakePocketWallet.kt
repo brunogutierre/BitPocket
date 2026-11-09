@@ -3,6 +3,7 @@ package io.github.brunogutierre.bitpocket.core.testing
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
 import io.github.brunogutierre.bitpocket.core.seed.SlotPayload
 import io.github.brunogutierre.bitpocket.core.wallet.Balance
+import io.github.brunogutierre.bitpocket.core.wallet.HistoryItem
 import io.github.brunogutierre.bitpocket.core.wallet.PocketWallet
 import io.github.brunogutierre.bitpocket.core.wallet.ReceiveAddress
 import io.github.brunogutierre.bitpocket.core.wallet.WalletOpener
@@ -17,6 +18,12 @@ class FakePocketWallet(
     override suspend fun nextReceiveAddress() = ReceiveAddress(0, "tb1q")
 
     override suspend fun freshReceiveAddress(): ReceiveAddress? = null
+
+    var historyItems = emptyList<HistoryItem>()
+
+    override suspend fun history() = historyItems
+
+    override suspend fun transaction(txid: String) = historyItems.firstOrNull { it.txid == txid }
 
     override suspend fun sync() = Unit
 

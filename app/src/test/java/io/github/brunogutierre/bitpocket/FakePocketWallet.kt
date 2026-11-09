@@ -3,6 +3,7 @@ package io.github.brunogutierre.bitpocket
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
 import io.github.brunogutierre.bitpocket.core.wallet.Balance
 import io.github.brunogutierre.bitpocket.core.wallet.ChainUnavailableException
+import io.github.brunogutierre.bitpocket.core.wallet.HistoryItem
 import io.github.brunogutierre.bitpocket.core.wallet.PocketWallet
 import io.github.brunogutierre.bitpocket.core.wallet.ReceiveAddress
 import kotlinx.coroutines.CompletableDeferred
@@ -26,6 +27,12 @@ class FakePocketWallet(
     override suspend fun nextReceiveAddress() = ReceiveAddress(0, "tb1qfirst")
 
     override suspend fun freshReceiveAddress(): ReceiveAddress? = freshAddresses.removeFirstOrNull()
+
+    var historyItems = emptyList<HistoryItem>()
+
+    override suspend fun history() = historyItems
+
+    override suspend fun transaction(txid: String) = historyItems.firstOrNull { it.txid == txid }
 
     override suspend fun sync() {
         syncs++

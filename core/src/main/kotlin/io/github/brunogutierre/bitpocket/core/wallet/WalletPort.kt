@@ -32,6 +32,12 @@ interface WalletPort {
      */
     suspend fun freshReceiveAddress(): ReceiveAddress?
 
+    /** Every wallet transaction, newest first. */
+    suspend fun history(): List<HistoryItem>
+
+    /** One transaction by id, or null if the wallet does not know it. */
+    suspend fun transaction(txid: String): HistoryItem?
+
     companion object {
         const val MAX_UNUSED_ADDRESSES = 10
     }

@@ -7,12 +7,14 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.bitcoindevkit.ChainPosition
 import org.bitcoindevkit.Descriptor
 import org.bitcoindevkit.EsploraException
 import org.bitcoindevkit.KeychainKind
 import org.bitcoindevkit.LoadWithPersistException
 import org.bitcoindevkit.PersistenceException
 import org.bitcoindevkit.Persister
+import org.bitcoindevkit.Txid
 import org.bitcoindevkit.Wallet
 import java.io.File
 
@@ -55,6 +57,44 @@ class BdkWallet internal constructor(
             wallet.persist(persister)
             ReceiveAddress(index = info.index.toInt(), address = info.address.toString())
         }
+
+    override suspend fun history(): List<HistoryItem> =
+        onWallet {
+            val tip = wallet.latestCheckpoint().height
+            wallet.transactions().mapNotNull { tx -> tx.transaction.computeTxid().use { historyItem(it, tip) } }.sortedNewestFirst()
+        }
+
+    override suspend fun transaction(txid: String): HistoryItem? =
+        onWallet {
+            val id = runCatching { Txid.fromString(txid) }.getOrNull() ?: return@onWallet null
+            id.use { historyItem(it, wallet.latestCheckpoint().height) }
+        }
+
+    private fun historyItem(
+        txid: Txid,
+        tip: UInt,
+    ): HistoryItem? {
+        val details = wallet.txDetails(txid) ?: return null
+        val (confirmations, timestamp) =
+            when (val position = details.chainPosition) {
+                is ChainPosition.Confirmed -> {
+                    val block = position.confirmationBlockTime
+                    (tip.toInt() - block.blockId.height.toInt() + 1).coerceAtLeast(1) to block.confirmationTime.toLong()
+                }
+
+                is ChainPosition.Unconfirmed -> {
+                    0 to position.timestamp?.toLong()
+                }
+            }
+        return HistoryItem(
+            txid = txid.toString(),
+            netSats = details.balanceDelta,
+            feeSats = details.fee?.toSat()?.toLong(),
+            feeRateSatPerVb = details.feeRate?.toSatPerVbCeil()?.toLong(),
+            confirmations = confirmations,
+            timestampSec = timestamp,
+        )
+    }
 
     /** A full scan the first time (local chain still at genesis), then only revealed scripts. */
     override suspend fun sync() =

@@ -86,6 +86,24 @@ class BdkWalletTest {
         }
 
     @Test
+    fun `history lists pending coins first, with confirmations counted from the tip`() =
+        runTest {
+            fundedWallet(confirmedAt = 100u, pendingSats = 20_000).use { wallet ->
+                val history = wallet.history()
+
+                assertEquals(listOf(20_000L, 50_000L), history.map { it.netSats })
+                assertEquals(listOf(0, 6), history.map { it.confirmations })
+                assertEquals(listOf(ChainFixtures.SEEN_AT.toLong(), 100L), history.map { it.timestampSec })
+                // The fake funding inputs are not the wallet's, so their fee is unknown.
+                assertNull(history.first().feeSats)
+                assertTrue(history.first().isPending)
+                assertEquals(history.last(), wallet.transaction(history.last().txid))
+                assertNull(wallet.transaction("00".repeat(32)))
+                assertNull(wallet.transaction("not a txid"))
+            }
+        }
+
+    @Test
     fun `the first sync is a full scan and later ones only check revealed scripts`() =
         runTest {
             BdkWallet.open(dir, descriptors, network, chain).use { wallet ->
