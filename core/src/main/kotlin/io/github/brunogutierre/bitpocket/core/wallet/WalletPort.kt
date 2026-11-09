@@ -2,7 +2,9 @@ package io.github.brunogutierre.bitpocket.core.wallet
 
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
 import io.github.brunogutierre.bitpocket.core.send.FeeOptions
+import io.github.brunogutierre.bitpocket.core.send.SpendPlan
 import io.github.brunogutierre.bitpocket.core.send.SpendPort
+import io.github.brunogutierre.bitpocket.core.send.SpendRequest
 import io.github.brunogutierre.bitpocket.core.send.SpendingStats
 
 /** Balance of a pocket, in satoshis. */
@@ -64,6 +66,24 @@ interface PocketWallet :
     ChainPort,
     SpendPort,
     AutoCloseable
+
+/** Spending from the Vault: the 2-of-2 branch, signed by PHONE and RECOVERY (ADR 0002, 0007). */
+interface VaultPort {
+    /** Throws `SpendException`, like `SpendPort.planSpend`. */
+    suspend fun planVaultSpend(request: SpendRequest): SpendPlan
+
+    /** The callers wipe both seeds. Throws `SpendException` or [ChainUnavailableException]. */
+    suspend fun sendFromVault(
+        plan: SpendPlan,
+        phoneSeed: ByteArray,
+        recoverySeed: ByteArray,
+    ): String
+}
+
+/** The Vault pocket (the BDK wallet implements both; only Vault pockets accept Vault spends). */
+interface VaultPocket :
+    PocketWallet,
+    VaultPort
 
 /** The chain backend failed (offline, timeout, HTTP error); the user can retry. */
 class ChainUnavailableException(

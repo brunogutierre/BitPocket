@@ -16,7 +16,7 @@ interface WalletOpener {
     fun openVault(
         payload: SlotPayload,
         config: VaultConfig,
-    ): PocketWallet
+    ): VaultPocket
 }
 
 /**
@@ -40,15 +40,15 @@ class BdkWalletOpener(
     override fun openVault(
         payload: SlotPayload,
         config: VaultConfig,
-    ): PocketWallet =
+    ): VaultPocket =
         withChain(payload.network) { chain ->
             BdkWallet.open(dirOf(payload), config.publicDescriptors(payload.network), payload.network, chain, vault = config)
         }
 
-    private fun withChain(
+    private fun <T : PocketWallet> withChain(
         network: SupportedNetwork,
-        open: (ChainClient) -> PocketWallet,
-    ): PocketWallet {
+        open: (ChainClient) -> T,
+    ): T {
         val chain = chainFor(network)
         return try {
             open(chain)

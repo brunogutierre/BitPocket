@@ -346,7 +346,7 @@ private fun spendErrorText(error: SpendError): String =
             stringResource(R.string.send_error_rejected)
         }
 
-        SpendError.UNSAFE_INPUT, SpendError.SIGNING_FAILED, SpendError.PLAN_MISMATCH, SpendError.OTHER -> {
+        SpendError.UNSAFE_INPUT, SpendError.SIGNING_FAILED, SpendError.PLAN_MISMATCH, SpendError.WRONG_BRANCH, SpendError.OTHER -> {
             stringResource(
                 R.string.send_error_other,
             )
