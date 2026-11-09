@@ -40,6 +40,9 @@ data object Settings : NavKey
 data object ChangePin : NavKey
 
 @Serializable
+data object GuardrailsSettings : NavKey
+
+@Serializable
 data class TransactionDetails(
     val txid: String,
 ) : NavKey
