@@ -9,7 +9,10 @@ import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
 import io.github.brunogutierre.bitpocket.core.send.AmountError
 import io.github.brunogutierre.bitpocket.core.send.AmountParser
 import io.github.brunogutierre.bitpocket.core.send.AmountResult
+import io.github.brunogutierre.bitpocket.core.send.ConfirmReason
 import io.github.brunogutierre.bitpocket.core.send.FeeOptions
+import io.github.brunogutierre.bitpocket.core.send.GuardrailCheck
+import io.github.brunogutierre.bitpocket.core.send.GuardrailVerdict
 import io.github.brunogutierre.bitpocket.core.send.RecipientError
 import io.github.brunogutierre.bitpocket.core.send.RecipientParser
 import io.github.brunogutierre.bitpocket.core.send.RecipientResult
@@ -20,6 +23,9 @@ import io.github.brunogutierre.bitpocket.core.send.SpendPlan
 import io.github.brunogutierre.bitpocket.core.send.SpendRequest
 import io.github.brunogutierre.bitpocket.core.session.SeedOutcome
 import io.github.brunogutierre.bitpocket.core.session.WalletAccess
+import io.github.brunogutierre.bitpocket.core.settings.Guardrails
+import io.github.brunogutierre.bitpocket.core.settings.GuardrailsPolicy
+import io.github.brunogutierre.bitpocket.core.settings.WalletSettings
 import io.github.brunogutierre.bitpocket.core.wallet.ChainUnavailableException
 import io.github.brunogutierre.bitpocket.core.wallet.PocketWallet
 import io.github.brunogutierre.bitpocket.security.LockoutCountdown
@@ -59,6 +65,10 @@ data class SendUiState(
     val spendError: SpendError? = null,
     val planning: Boolean = false,
     val plan: SpendPlan? = null,
+    /** How the guardrails judged [plan]. */
+    val guardrail: GuardrailVerdict = GuardrailVerdict.Allowed,
+    /** Confirmations the user ticked on Review. */
+    val acknowledged: Set<ConfirmReason> = emptySet(),
     val pinEntered: Int = 0,
     val pinVerifying: Boolean = false,
     val wrongPin: Boolean = false,
@@ -72,6 +82,15 @@ data class SendUiState(
     val txid: String? = null,
 ) {
     val pinKeysEnabled: Boolean get() = !pinVerifying && lockoutSeconds == 0L
+
+    /** Not blocked, and every confirmation the guardrails asked for is ticked. */
+    val canConfirm: Boolean
+        get() =
+            when (val verdict = guardrail) {
+                GuardrailVerdict.Allowed -> true
+                is GuardrailVerdict.Blocked -> false
+                is GuardrailVerdict.NeedsConfirmation -> acknowledged.containsAll(verdict.reasons)
+            }
 
     val feeRate: Long? get() = fees?.rateFor(speed)
     val canReview: Boolean get() = fees != null && !planning
@@ -95,6 +114,8 @@ class SendViewModel(
     private val walletAccess: WalletAccess,
     /** The session's biometric-sealed seed, or null when biometric signing is off. */
     val biometricSeed: ByteArray?,
+    /** The session's settings, for the guardrails in force. */
+    private val settings: WalletSettings = WalletSettings(),
     private val workDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
     val network: SupportedNetwork = pocket.network
@@ -156,7 +177,11 @@ class SendViewModel(
         viewModelScope.launch {
             try {
                 val plan = pocket.planSpend(SpendRequest(address, sendAmount, feeRate))
-                _state.update { it.copy(planning = false, plan = plan, stage = SendStage.REVIEW) }
+                val stats = pocket.spendingStats(Guardrails.WINDOW_BLOCKS)
+                val verdict = GuardrailCheck.evaluate(GuardrailsPolicy.effective(settings, stats.tipHeight), plan, stats)
+                _state.update {
+                    it.copy(planning = false, plan = plan, guardrail = verdict, acknowledged = emptySet(), stage = SendStage.REVIEW)
+                }
             } catch (e: SpendException) {
                 _state.update { it.copy(planning = false, spendError = e.error) }
             }
@@ -166,9 +191,14 @@ class SendViewModel(
     /** From REVIEW back to EDIT, keeping what was typed. */
     fun edit() = _state.update { it.copy(stage = SendStage.EDIT, plan = null, broadcastFailed = false, spendError = null) }
 
+    fun acknowledge(
+        reason: ConfirmReason,
+        checked: Boolean,
+    ) = _state.update { it.copy(acknowledged = if (checked) it.acknowledged + reason else it.acknowledged - reason) }
+
     /** "Confirm and send" on REVIEW. */
     fun confirm() {
-        if (_state.value.plan == null) return
+        if (_state.value.plan == null || !_state.value.canConfirm) return
         val stage = if (biometricSeed != null) SendStage.AUTH_BIOMETRIC else SendStage.AUTH_PIN
         _state.update { it.copy(stage = stage, broadcastFailed = false, spendError = null, biometricFailure = null, authFailed = false) }
     }

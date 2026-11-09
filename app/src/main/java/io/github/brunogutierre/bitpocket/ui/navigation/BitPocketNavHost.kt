@@ -170,7 +170,7 @@ fun BitPocketNavHost(
                     val wallet = container.session.wallet
                     if (wallet != null) {
                         SendScreen(
-                            viewModel { SendViewModel(wallet.spending, container.walletAccess, wallet.biometricSeed) },
+                            viewModel { SendViewModel(wallet.spending, container.walletAccess, wallet.biometricSeed, wallet.settings) },
                             biometricOpener = container.biometricSeedOpener,
                             onBack = back,
                             onDone = back,

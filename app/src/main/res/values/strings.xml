@@ -164,5 +164,10 @@
     <string name="fingerprint_description">Address fingerprint: %1$s</string>
     <string name="receive_fingerprint_hint">Ask the sender to check these words and picture before paying.</string>
     <string name="send_review_fingerprint_hint">Compare with the fingerprint on the recipient\'s screen.</string>
+    <string name="guardrail_blocked_title">Over your spending limit</string>
+    <string name="guardrail_blocked_per_tx">At most %1$s can leave the wallet in one transaction, fee included. Lower the amount, or raise the limit in Settings (it takes effect after about a day).</string>
+    <string name="guardrail_blocked_window">Only %1$s more can leave the wallet in the last 24 hours, fee included. Lower the amount or wait.</string>
+    <string name="guardrail_confirm_new_recipient">I have never paid this address. I checked it with the recipient.</string>
+    <string name="guardrail_confirm_large_share">This sends more than half of my balance.</string>
     <string name="pin_too_weak">PIN too easy to guess. Choose another one.</string>
 </resources>
