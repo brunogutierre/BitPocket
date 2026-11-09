@@ -6,9 +6,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -18,6 +20,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.fragment.app.FragmentActivity
 import io.github.brunogutierre.bitpocket.R
@@ -30,6 +33,7 @@ import io.github.brunogutierre.bitpocket.ui.components.PageScaffold
 import io.github.brunogutierre.bitpocket.ui.components.PinPrompt
 import io.github.brunogutierre.bitpocket.ui.components.PinPromptStatus
 import io.github.brunogutierre.bitpocket.ui.components.PrimaryButton
+import io.github.brunogutierre.bitpocket.ui.components.SecureScreen
 import io.github.brunogutierre.bitpocket.ui.theme.Spacing
 import io.github.brunogutierre.bitpocket.ui.theme.extendedColors
 import io.github.brunogutierre.bitpocket.ui.theme.monoTypography
@@ -123,5 +127,35 @@ private fun WaitingPage(text: String) {
     ) {
         CircularProgressIndicator()
         Text(text, style = MaterialTheme.typography.titleMedium)
+    }
+}
+
+/** Vault spends: type the 12 recovery words to co-sign; checked against the Vault's RECOVERY key. */
+@Composable
+internal fun RecoveryStage(
+    viewModel: SendViewModel,
+    state: SendUiState,
+) {
+    BackHandler(onBack = viewModel::cancelRecovery)
+    SecureScreen {
+        PageScaffold(
+            title = stringResource(R.string.vault_sign_title),
+            onBack = viewModel::cancelRecovery,
+            network = viewModel.network,
+            bottomActions = { PrimaryButton(stringResource(R.string.vault_sign_continue), onClick = viewModel::submitRecovery) },
+        ) {
+            Text(stringResource(R.string.vault_sign_body), style = MaterialTheme.typography.bodyMedium)
+            OutlinedTextField(
+                value = state.recoveryText,
+                onValueChange = viewModel::onRecoveryTextChange,
+                label = { Text(stringResource(R.string.vault_recovery_title)) },
+                isError = state.recoveryError,
+                supportingText = if (state.recoveryError) ({ Text(stringResource(R.string.vault_sign_wrong_words)) }) else null,
+                // Password type: keyboards must not learn or suggest recovery words.
+                keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, keyboardType = KeyboardType.Password),
+                minLines = 3,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }

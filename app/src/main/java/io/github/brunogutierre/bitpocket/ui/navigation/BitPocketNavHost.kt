@@ -185,13 +185,15 @@ fun BitPocketNavHost(
                             onBack = back,
                             onReceive = { backStack.add(Receive(vault = true)) },
                             onMoveIn = { backStack.add(Send(toVault = true)) },
+                            onSend = { backStack.add(Send(fromVault = true)) },
                             onTransaction = { txid -> backStack.add(TransactionDetails(txid, vault = true)) },
                         )
                     }
                 }
                 entry<Send> { route ->
                     val wallet = container.session.wallet
-                    if (wallet != null) {
+                    val pocket = if (route.fromVault) wallet?.vault else wallet?.spending
+                    if (wallet != null && pocket != null) {
                         SendScreen(
                             viewModel {
                                 val prefill: (suspend () -> String?)? =
@@ -207,7 +209,8 @@ fun BitPocketNavHost(
                                     } else {
                                         null
                                     }
-                                SendViewModel(wallet.spending, container.walletAccess, wallet.biometricSeed, wallet.settings, prefill)
+                                val recoveryKey = if (route.fromVault) wallet.settings.vault?.recoveryKey else null
+                                SendViewModel(pocket, container.walletAccess, wallet.biometricSeed, wallet.settings, prefill, recoveryKey)
                             },
                             biometricOpener = container.biometricSeedOpener,
                             onBack = back,

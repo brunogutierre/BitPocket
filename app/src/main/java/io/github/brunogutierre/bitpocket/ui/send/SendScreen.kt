@@ -67,6 +67,7 @@ fun SendScreen(
     when (state.stage) {
         SendStage.EDIT -> EditStage(viewModel, state, onBack)
         SendStage.SCAN -> ScanStage(onScanned = viewModel::onScanned, onCancel = viewModel::cancelScan)
+        SendStage.RECOVERY -> RecoveryStage(viewModel, state)
         SendStage.REVIEW -> state.plan?.let { ReviewStage(viewModel, state, it) }
         SendStage.AUTH_BIOMETRIC -> BiometricStage(viewModel, biometricOpener)
         SendStage.AUTH_PIN -> PinStage(viewModel, state)
@@ -83,7 +84,7 @@ private fun EditStage(
 ) {
     val context = LocalContext.current
     PageScaffold(
-        title = stringResource(R.string.send_title),
+        title = stringResource(if (viewModel.isVault) R.string.vault_send_title else R.string.send_title),
         onBack = onBack,
         network = viewModel.network,
         bottomActions = {
