@@ -48,6 +48,14 @@ class BdkWallet internal constructor(
             ReceiveAddress(index = info.index.toInt(), address = info.address.toString())
         }
 
+    override suspend fun freshReceiveAddress(): ReceiveAddress? =
+        onWallet {
+            if (wallet.listUnusedAddresses(KeychainKind.EXTERNAL).size >= WalletPort.MAX_UNUSED_ADDRESSES) return@onWallet null
+            val info = wallet.revealNextAddress(KeychainKind.EXTERNAL)
+            wallet.persist(persister)
+            ReceiveAddress(index = info.index.toInt(), address = info.address.toString())
+        }
+
     /** A full scan the first time (local chain still at genesis), then only revealed scripts. */
     override suspend fun sync() =
         onWallet {

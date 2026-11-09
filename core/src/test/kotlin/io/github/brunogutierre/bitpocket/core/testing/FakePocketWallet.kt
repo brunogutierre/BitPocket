@@ -16,6 +16,8 @@ class FakePocketWallet(
 
     override suspend fun nextReceiveAddress() = ReceiveAddress(0, "tb1q")
 
+    override suspend fun freshReceiveAddress(): ReceiveAddress? = null
+
     override suspend fun sync() = Unit
 
     override fun close() {

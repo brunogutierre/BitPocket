@@ -22,8 +22,19 @@ interface WalletPort {
 
     suspend fun balance(): Balance
 
-    /** Reveals (and persists) the next unused receive address. */
+    /** The first revealed address that is still unused (revealed and persisted when needed). */
     suspend fun nextReceiveAddress(): ReceiveAddress
+
+    /**
+     * Reveals a brand-new address, or returns null while [MAX_UNUSED_ADDRESSES] revealed ones are
+     * still waiting for funds: a restore scans until 20 unused addresses in a row (the stop gap),
+     * so staying well below it means a restored wallet always finds every payment.
+     */
+    suspend fun freshReceiveAddress(): ReceiveAddress?
+
+    companion object {
+        const val MAX_UNUSED_ADDRESSES = 10
+    }
 }
 
 /** The chain backend of a wallet (Esplora). Fee rates and broadcast arrive with sending. */
