@@ -15,8 +15,15 @@ descriptors handed to it would have to be stored somewhere outside the encrypted
 - **Watch-only wallets.** Every BDK wallet is built from **public** descriptors (`tpub`) only and
   persisted with `Persister.newSqlite` in `noBackupFilesDir/wallets/<id>/spending.sqlite`.
   Private keys never reach a persisted wallet.
-- **Short-lived signers.** Spending (M1 `feat/send-sign`) builds the private descriptors from the
-  seed only for signing (`Wallet.signWithSigners`) and closes them right after.
+- **Short-lived signers.** Spending builds the private descriptors from the seed only for signing
+  (`Wallet.signWithSigners`) and closes them right after.
+- **No seed in the session.** After unlock, the seed is wiped as soon as the pockets are open; the
+  session keeps the slot, network, biometric-sealed seed and open wallets. Each signature gets the
+  seed again: by BiometricPrompt (Class 3 only) when biometric signing is on, else by re-entering
+  the PIN through the same Argon2id + backoff path as unlocking. A PIN that opens another slot is
+  a wrong PIN there (the failure stays recorded), so re-authentication is never a slot oracle.
+- **Checked before broadcast.** The signed transaction must match the reviewed plan (recipient
+  amount, change, outputs, fee, inputs) and `SpendGuard` runs again on the PSBT.
 - **One database per wallet, not per slot.** `id = hex(SHA-256(network + public external
   descriptor))[0..16]`: the directory name does not reveal which slot is in use (duress, M5), and
   the network is part of it because Signet and Testnet4 share the same `tpub`.

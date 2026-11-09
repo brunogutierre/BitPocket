@@ -69,6 +69,8 @@ A layered-security Bitcoin wallet for Android, built as a study project.
 | SpendGuard on every spend: confirmed coins only | Unconfirmed `older()` spends abort the process in BDK 3.1.0 | [ADR 0002](docs/adr/0002-vault-policy-and-signing.md) |
 | Amounts typed in whole sats; minimum 546 sats | No decimal separator to get wrong; above every dust limit | — |
 | Fee estimates fetched directly (any 2xx) | mempool.space answers `/fee-estimates` with HTTP 203, which BDK rejects | — |
+| Session keeps no seed; each signature asks for biometrics or the PIN | A biometric gate means nothing if the seed stays in RAM | [ADR 0004](docs/adr/0004-watch-only-wallets-and-esplora-sync.md) |
+| `androidx.biometric` 1.1.0 stable + `FragmentActivity` | No alpha libraries on the signing path | — |
 | App unit tests use `bdk-jvm` | View models are tested against real BDK validation | [ADR 0001](docs/adr/0001-bdk-on-jvm-for-core-tests.md) |
 
 ## Building
