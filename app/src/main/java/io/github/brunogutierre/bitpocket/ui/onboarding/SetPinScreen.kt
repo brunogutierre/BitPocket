@@ -13,6 +13,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.brunogutierre.bitpocket.R
 import io.github.brunogutierre.bitpocket.onboarding.PinStage
 import io.github.brunogutierre.bitpocket.onboarding.SetPinViewModel
+import io.github.brunogutierre.bitpocket.ui.components.PageScaffold
 import io.github.brunogutierre.bitpocket.ui.components.PinPad
 
 @Composable
@@ -24,7 +25,7 @@ fun SetPinScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     LaunchedEffect(viewModel) { viewModel.created.collect { onCreated() } }
     val title = if (state.stage == PinStage.CHOOSE) R.string.pin_choose_title else R.string.pin_confirm_title
-    OnboardingScaffold(title = stringResource(title), onBack = if (state.saving) null else onBack) {
+    PageScaffold(title = stringResource(title), onBack = if (state.saving) null else onBack) {
         val message =
             when {
                 state.saving -> R.string.pin_creating

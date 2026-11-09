@@ -20,9 +20,12 @@ class FakePocketWallet(
 
     override suspend fun balance() = balance
 
-    override suspend fun nextReceiveAddress() = ReceiveAddress(0, "tb1q")
+    /** Addresses handed out by [freshReceiveAddress], in order; empty = at the unused limit. */
+    val freshAddresses = ArrayDeque<ReceiveAddress>()
 
-    override suspend fun freshReceiveAddress(): ReceiveAddress? = null
+    override suspend fun nextReceiveAddress() = ReceiveAddress(0, "tb1qfirst")
+
+    override suspend fun freshReceiveAddress(): ReceiveAddress? = freshAddresses.removeFirstOrNull()
 
     override suspend fun sync() {
         syncs++

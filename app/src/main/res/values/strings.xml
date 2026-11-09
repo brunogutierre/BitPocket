@@ -54,5 +54,15 @@
     <string name="home_sync_failed_title">Could not sync</string>
     <string name="home_sync_failed_body">Showing the last saved balance. Pull down to try again.</string>
     <string name="home_lock">Lock</string>
+    <string name="home_receive">Receive</string>
+    <string name="receive_title">Receive</string>
+    <string name="receive_copy">Copy address</string>
+    <string name="receive_share">Share</string>
+    <string name="receive_copied">Address copied</string>
+    <string name="receive_clip_label">Bitcoin address</string>
+    <string name="receive_qr_description">QR code of the receive address</string>
+    <string name="receive_network_hint">Only send %1$s test coins to this address.</string>
+    <string name="receive_new_address">New address</string>
+    <string name="receive_unused_limit">10 addresses are still waiting for coins. Use one of them before creating another.</string>
     <string name="pin_too_weak">PIN too easy to guess. Choose another one.</string>
 </resources>

@@ -25,6 +25,7 @@ import io.github.brunogutierre.bitpocket.onboarding.RestoreSeedViewModel
 import io.github.brunogutierre.bitpocket.onboarding.SetPinViewModel
 import io.github.brunogutierre.bitpocket.onboarding.VerifySeedViewModel
 import io.github.brunogutierre.bitpocket.onboarding.WelcomeViewModel
+import io.github.brunogutierre.bitpocket.receive.ReceiveViewModel
 import io.github.brunogutierre.bitpocket.ui.components.SecureScreen
 import io.github.brunogutierre.bitpocket.ui.home.HomeScreen
 import io.github.brunogutierre.bitpocket.ui.lock.LockScreen
@@ -33,6 +34,7 @@ import io.github.brunogutierre.bitpocket.ui.onboarding.RestoreSeedScreen
 import io.github.brunogutierre.bitpocket.ui.onboarding.SetPinScreen
 import io.github.brunogutierre.bitpocket.ui.onboarding.VerifySeedScreen
 import io.github.brunogutierre.bitpocket.ui.onboarding.WelcomeScreen
+import io.github.brunogutierre.bitpocket.ui.receive.ReceiveScreen
 
 private const val NAV_DURATION_MS = 300
 
@@ -130,8 +132,16 @@ fun BitPocketNavHost(
                     // Null only for a moment after process death: the route guard then shows Lock.
                     val wallet = container.session.wallet
                     if (wallet != null) {
-                        HomeScreen(viewModel { HomeViewModel(wallet.spending, container.session::lock) }, onLocked = { resetTo(Lock) })
+                        HomeScreen(
+                            viewModel { HomeViewModel(wallet.spending, container.session::lock) },
+                            onReceive = { backStack.add(Receive) },
+                            onLocked = { resetTo(Lock) },
+                        )
                     }
+                }
+                entry<Receive> {
+                    val wallet = container.session.wallet
+                    if (wallet != null) ReceiveScreen(viewModel { ReceiveViewModel(wallet.spending) }, onBack = back)
                 }
             },
     )

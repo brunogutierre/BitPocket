@@ -25,6 +25,7 @@ import io.github.brunogutierre.bitpocket.onboarding.WelcomeAction
 import io.github.brunogutierre.bitpocket.onboarding.WelcomeEvent
 import io.github.brunogutierre.bitpocket.onboarding.WelcomeViewModel
 import io.github.brunogutierre.bitpocket.ui.components.NetworkBadge
+import io.github.brunogutierre.bitpocket.ui.components.PageScaffold
 import io.github.brunogutierre.bitpocket.ui.components.PrimaryButton
 import io.github.brunogutierre.bitpocket.ui.components.SecondaryButton
 import io.github.brunogutierre.bitpocket.ui.components.WarningBanner
@@ -40,7 +41,7 @@ fun WelcomeScreen(
     LaunchedEffect(viewModel) {
         viewModel.events.collect { if (it == WelcomeEvent.SHOW_NEW_SEED) onShowNewSeed() else onRestore() }
     }
-    OnboardingScaffold(
+    PageScaffold(
         title = stringResource(R.string.app_name),
         onBack = null,
         bottomActions = {
