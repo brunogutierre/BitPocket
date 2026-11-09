@@ -46,7 +46,11 @@ android {
     }
 
     testOptions {
-        unitTests.all { it.useJUnitPlatform() }
+        unitTests.all {
+            it.useJUnitPlatform()
+            // BDK loads its native library through JNA (bdk-jvm in unit tests, see below).
+            it.jvmArgs("--enable-native-access=ALL-UNNAMED")
+        }
     }
 }
 
@@ -75,6 +79,9 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     debugImplementation(libs.androidx.compose.ui.tooling)
 
+    // JVM unit tests run the real BDK with its desktop natives (bdk-jvm, same API and version as
+    // bdk-android, whose Android .so files cannot load on the JVM; it is excluded below).
+    testImplementation(libs.bdk.jvm)
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)
@@ -83,4 +90,8 @@ dependencies {
 
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.ext.junit)
+}
+
+configurations.matching { it.name.endsWith("UnitTestRuntimeClasspath") }.configureEach {
+    exclude(group = "org.bitcoindevkit", module = "bdk-android")
 }

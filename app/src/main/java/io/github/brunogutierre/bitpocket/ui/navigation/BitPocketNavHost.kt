@@ -27,6 +27,7 @@ import io.github.brunogutierre.bitpocket.onboarding.SetPinViewModel
 import io.github.brunogutierre.bitpocket.onboarding.VerifySeedViewModel
 import io.github.brunogutierre.bitpocket.onboarding.WelcomeViewModel
 import io.github.brunogutierre.bitpocket.receive.ReceiveViewModel
+import io.github.brunogutierre.bitpocket.send.SendViewModel
 import io.github.brunogutierre.bitpocket.ui.components.SecureScreen
 import io.github.brunogutierre.bitpocket.ui.history.TransactionDetailsScreen
 import io.github.brunogutierre.bitpocket.ui.home.HomeScreen
@@ -37,6 +38,7 @@ import io.github.brunogutierre.bitpocket.ui.onboarding.SetPinScreen
 import io.github.brunogutierre.bitpocket.ui.onboarding.VerifySeedScreen
 import io.github.brunogutierre.bitpocket.ui.onboarding.WelcomeScreen
 import io.github.brunogutierre.bitpocket.ui.receive.ReceiveScreen
+import io.github.brunogutierre.bitpocket.ui.send.SendScreen
 
 private const val NAV_DURATION_MS = 300
 
@@ -137,6 +139,7 @@ fun BitPocketNavHost(
                         HomeScreen(
                             viewModel { HomeViewModel(wallet.spending, container.session::lock) },
                             onReceive = { backStack.add(Receive) },
+                            onSend = { backStack.add(Send) },
                             onTransaction = { txid -> backStack.add(TransactionDetails(txid)) },
                             onLocked = { resetTo(Lock) },
                         )
@@ -145,6 +148,10 @@ fun BitPocketNavHost(
                 entry<Receive> {
                     val wallet = container.session.wallet
                     if (wallet != null) ReceiveScreen(viewModel { ReceiveViewModel(wallet.spending) }, onBack = back)
+                }
+                entry<Send> {
+                    val wallet = container.session.wallet
+                    if (wallet != null) SendScreen(viewModel { SendViewModel(wallet.spending) }, onBack = back)
                 }
                 entry<TransactionDetails> { route ->
                     val wallet = container.session.wallet
