@@ -74,12 +74,16 @@ class FakePocketWallet(
 }
 
 /** Opens a [FakePocketWallet] per unlock (or fails when [failure] is set). */
-class FakeWalletOpener : WalletOpener {
+class FakeWalletOpener(
+    private val root: java.io.File = java.io.File("build/fake-wallets"),
+) : WalletOpener {
     val opened = mutableListOf<FakePocketWallet>()
 
     /** The payloads it was given (the same objects, so tests can check they were wiped). */
     val payloads = mutableListOf<SlotPayload>()
     var failure: Exception? = null
+
+    override fun dirOf(payload: SlotPayload) = java.io.File(root, payload.network.name)
 
     override fun open(payload: SlotPayload): FakePocketWallet {
         failure?.let { throw it }

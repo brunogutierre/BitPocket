@@ -17,6 +17,12 @@ import io.github.brunogutierre.bitpocket.core.settings.AutoLock
 import io.github.brunogutierre.bitpocket.core.settings.WalletSettings
 import io.github.brunogutierre.bitpocket.core.testing.FakePocketWallet
 import io.github.brunogutierre.bitpocket.core.testing.FakeWalletOpener
+import io.github.brunogutierre.bitpocket.core.vault.HeirTimelock
+import io.github.brunogutierre.bitpocket.core.vault.VaultBackup
+import io.github.brunogutierre.bitpocket.core.vault.VaultBackupContents
+import io.github.brunogutierre.bitpocket.core.vault.VaultConfig
+import io.github.brunogutierre.bitpocket.core.vault.VaultKeys
+import io.github.brunogutierre.bitpocket.core.vault.VaultRole
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -177,6 +183,62 @@ class SlotWalletAccessTest {
         session.lock()
         access.unlock("123456".toCharArray())
         assertEquals(AutoLock.IMMEDIATELY, session.wallet!!.settings.autoLock)
+    }
+
+    @Test
+    fun `sets up the Vault once, with a backup every cosigner can open`() {
+        val access = access()
+        access.create("123456".toCharArray(), entropy, SupportedNetwork.SIGNET)
+        val recovery = ByteArray(16) { 7 }
+        val heir = ByteArray(16) { 8 }
+
+        assertEquals(
+            VaultSetupOutcome.Denied(SettingsOutcome.WrongPin(Duration.ZERO)),
+            access.setUpVault("000000".toCharArray(), recovery, heir, HeirTimelock.HOUR),
+        )
+        val done = access.setUpVault("123456".toCharArray(), recovery, heir, HeirTimelock.HOUR) as VaultSetupOutcome.Done
+
+        val vault = session.wallet!!.settings.vault!!
+        assertEquals(VaultKeys.publicKey(entropy, SupportedNetwork.SIGNET), vault.phoneKey)
+        assertEquals(HeirTimelock.HOUR, vault.timelock)
+        listOf(entropy, recovery, heir).forEach { assertEquals(vault, VaultBackup.open(done.backup, it)!!.config) }
+        assertEquals(VaultSetupOutcome.AlreadySetUp, access.setUpVault("123456".toCharArray(), recovery, heir, HeirTimelock.DAY))
+        session.lock()
+        access.unlock("123456".toCharArray())
+        assertEquals(vault, session.wallet!!.settings.vault)
+    }
+
+    @Test
+    fun `imports the Vault of a restored wallet only from its own backup`() {
+        val network = SupportedNetwork.SIGNET
+        val config =
+            VaultConfig(
+                VaultKeys.publicKey(entropy, network),
+                VaultKeys.publicKey(
+                    ByteArray(16) {
+                        7
+                    },
+                    network,
+                ),
+                VaultKeys.publicKey(ByteArray(16) { 8 }, network),
+                HeirTimelock.DAY,
+            )
+        val backup =
+            VaultBackup.seal(
+                VaultBackupContents(network, config),
+                mapOf(
+                    VaultRole.PHONE to entropy,
+                    VaultRole.HEIR to ByteArray(16) { 8 },
+                ),
+            )
+        val othersBackup = VaultBackup.seal(VaultBackupContents(network, config), mapOf(VaultRole.HEIR to ByteArray(16) { 8 }))
+        val access = access()
+        access.create("123456".toCharArray(), entropy, network)
+
+        assertEquals(VaultSetupOutcome.NotThisWallet, access.importVault("123456".toCharArray(), othersBackup))
+        assertEquals(VaultSetupOutcome.NotThisWallet, access.importVault("123456".toCharArray(), "junk".toByteArray()))
+        assertTrue(access.importVault("123456".toCharArray(), backup) is VaultSetupOutcome.Done)
+        assertEquals(config, session.wallet!!.settings.vault)
     }
 
     @Test

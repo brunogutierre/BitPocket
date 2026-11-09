@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.getAndUpdate
+import java.io.File
 
 /**
  * The wallet unlocked in this process. It keeps NO seed: only what is needed while unlocked (the
@@ -22,6 +23,8 @@ data class UnlockedWallet(
     val biometricSeed: ByteArray?,
     val spending: PocketWallet,
     val settings: WalletSettings = WalletSettings(),
+    /** The wallet's directory (see `WalletOpener.dirOf`), e.g. for the Vault backup file. */
+    val dir: File? = null,
 )
 
 /** Holds the unlocked wallet in memory only; [lock] closes its pockets. */

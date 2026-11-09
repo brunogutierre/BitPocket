@@ -5,8 +5,11 @@ import io.github.brunogutierre.bitpocket.core.seed.SlotPayload
 import java.io.File
 
 /** Opens the pockets of a wallet that was just unlocked. */
-fun interface WalletOpener {
+interface WalletOpener {
     fun open(payload: SlotPayload): PocketWallet
+
+    /** The wallet's own directory (databases, Vault backup), named from public data. */
+    fun dirOf(payload: SlotPayload): File
 }
 
 /**
@@ -17,6 +20,11 @@ class BdkWalletOpener(
     private val root: File,
     private val chainFor: (SupportedNetwork) -> ChainClient,
 ) : WalletOpener {
+    override fun dirOf(payload: SlotPayload): File {
+        val descriptors = SpendingDescriptors.fromEntropy(payload.seedEntropy, payload.network).use { it.toPublic() }
+        return WalletFiles.dir(root, WalletFiles.id(payload.network, descriptors))
+    }
+
     override fun open(payload: SlotPayload): PocketWallet {
         val descriptors = SpendingDescriptors.fromEntropy(payload.seedEntropy, payload.network).use { it.toPublic() }
         val dir = WalletFiles.dir(root, WalletFiles.id(payload.network, descriptors))
