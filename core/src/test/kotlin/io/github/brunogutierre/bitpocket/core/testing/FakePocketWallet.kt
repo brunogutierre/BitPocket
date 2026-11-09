@@ -85,6 +85,13 @@ class FakeWalletOpener(
 
     override fun dirOf(payload: SlotPayload) = java.io.File(root, payload.network.name)
 
+    val vaults = mutableListOf<FakePocketWallet>()
+
+    override fun openVault(
+        payload: SlotPayload,
+        config: io.github.brunogutierre.bitpocket.core.vault.VaultConfig,
+    ): FakePocketWallet = FakePocketWallet(payload.network).also { vaults += it }
+
     override fun open(payload: SlotPayload): FakePocketWallet {
         failure?.let { throw it }
         payloads += payload

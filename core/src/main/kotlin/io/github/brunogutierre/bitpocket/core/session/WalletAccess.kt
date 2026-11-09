@@ -320,6 +320,7 @@ class SlotWalletAccess(
         val settings = payload.settings.copy(vault = config)
         save(slot, pin, payload.withSettings(settings))
         session.updateSettings(settings)
+        session.updateVault(opener.openVault(payload, config))
     }
 
     private fun withVaultPayload(
@@ -426,7 +427,16 @@ class SlotWalletAccess(
     ) {
         try {
             val spending = opener.open(payload)
-            session.open(UnlockedWallet(slot, payload.network, payload.biometricSeed, spending, payload.settings, opener.dirOf(payload)))
+            val vault =
+                try {
+                    payload.settings.vault?.let { opener.openVault(payload, it) }
+                } catch (e: Exception) {
+                    spending.close()
+                    throw e
+                }
+            session.open(
+                UnlockedWallet(slot, payload.network, payload.biometricSeed, spending, payload.settings, opener.dirOf(payload), vault),
+            )
         } finally {
             payload.seedEntropy.wipe()
         }

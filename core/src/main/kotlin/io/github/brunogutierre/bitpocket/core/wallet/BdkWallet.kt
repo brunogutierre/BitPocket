@@ -9,6 +9,7 @@ import io.github.brunogutierre.bitpocket.core.send.SpendException
 import io.github.brunogutierre.bitpocket.core.send.SpendPlan
 import io.github.brunogutierre.bitpocket.core.send.SpendRequest
 import io.github.brunogutierre.bitpocket.core.send.SpendingStats
+import io.github.brunogutierre.bitpocket.core.vault.VaultConfig
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -53,6 +54,8 @@ class BdkWallet internal constructor(
     override val network: SupportedNetwork,
     private val chain: ChainClient,
     private val dispatcher: CoroutineDispatcher = serialIoDispatcher(),
+    /** Set for the Vault pocket: its spends need a policy path and two signers (ADR 0002). */
+    private val vault: VaultConfig? = null,
 ) : PocketWallet {
     override suspend fun balance(): Balance =
         onWallet {
@@ -183,6 +186,7 @@ class BdkWallet internal constructor(
 
     override suspend fun planSpend(request: SpendRequest): SpendPlan =
         onWallet {
+            check(vault == null) { "Vault spends need the 2-of-2 path and the recovery key" }
             val recipient =
                 try {
                     Address(request.address, network.toBdkNetwork())
@@ -337,7 +341,8 @@ class BdkWallet internal constructor(
         }
 
     companion object {
-        private const val DB_FILE = "spending.sqlite"
+        const val SPENDING_DB = "spending.sqlite"
+        const val VAULT_DB = "vault.sqlite"
 
         /**
          * Opens the wallet stored in [dir], creating it on first use. The database only caches
@@ -350,15 +355,25 @@ class BdkWallet internal constructor(
             network: SupportedNetwork,
             chain: ChainClient,
             dispatcher: CoroutineDispatcher = serialIoDispatcher(),
+            vault: VaultConfig? = null,
         ): BdkWallet {
             check(dir.isDirectory || dir.mkdirs()) { "Cannot create $dir" }
-            val db = File(dir, DB_FILE)
+            val db = File(dir, if (vault == null) SPENDING_DB else VAULT_DB)
             val kind = network.toBdkNetworkKind()
             return Descriptor(descriptors.external, kind).use { external ->
                 Descriptor(descriptors.internal, kind).use { internal ->
-                    loadOrNull(db, external, internal) { wallet, persister -> BdkWallet(wallet, persister, network, chain, dispatcher) }
+                    loadOrNull(db, external, internal) { wallet, persister ->
+                        BdkWallet(wallet, persister, network, chain, dispatcher, vault)
+                    }
                         ?: Persister.newSqlite(db.path).let { persister ->
-                            BdkWallet(Wallet(external, internal, network.toBdkNetwork(), persister), persister, network, chain, dispatcher)
+                            BdkWallet(
+                                Wallet(external, internal, network.toBdkNetwork(), persister),
+                                persister,
+                                network,
+                                chain,
+                                dispatcher,
+                                vault,
+                            )
                         }
                 }
             }
