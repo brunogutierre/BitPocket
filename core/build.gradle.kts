@@ -25,6 +25,8 @@ dependencies {
     implementation(libs.bouncycastle.prov)
     // Wallet I/O (SQLite, Esplora) runs on a per-wallet serial dispatcher.
     implementation(libs.kotlinx.coroutines.core)
+    // QR codes: pure Java, so encoding (and M2 decoding) is unit tested on the JVM.
+    implementation(libs.zxing.core)
 
     testImplementation(libs.bdk.jvm)
     testImplementation(libs.kotlinx.coroutines.test)
