@@ -30,6 +30,7 @@ data class SettingsUiState(
     val biometricOn: Boolean = false,
     val biometricAvailable: Boolean = false,
     val autoLock: AutoLock = AutoLock.DEFAULT,
+    val hasVault: Boolean = false,
     val choosingAutoLock: Boolean = false,
     /** The auto-lock time waiting for the PIN. */
     val pendingAutoLock: AutoLock? = null,
@@ -67,6 +68,7 @@ class SettingsViewModel(
                 biometricOn = session.wallet?.biometricSeed != null,
                 biometricAvailable = biometricAvailable,
                 autoLock = session.wallet?.settings?.autoLock ?: AutoLock.DEFAULT,
+                hasVault = session.wallet?.settings?.vault != null,
             ),
         )
     val state: StateFlow<SettingsUiState> = _state.asStateFlow()
@@ -76,6 +78,9 @@ class SettingsViewModel(
     fun showRecoveryPhrase() = ask(PinAction.SHOW_PHRASE)
 
     fun setBiometricSigning(on: Boolean) = ask(if (on) PinAction.ENABLE_BIOMETRICS else PinAction.DISABLE_BIOMETRICS)
+
+    /** Back on Settings after the Vault wizard: show what changed. */
+    fun refresh() = _state.update { it.copy(hasVault = session.wallet?.settings?.vault != null) }
 
     fun openAutoLock() = _state.update { it.copy(choosingAutoLock = true) }
 

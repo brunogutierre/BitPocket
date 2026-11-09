@@ -11,6 +11,7 @@ import io.github.brunogutierre.bitpocket.core.crypto.FileSlotStorage
 import io.github.brunogutierre.bitpocket.core.crypto.KdfParams
 import io.github.brunogutierre.bitpocket.core.crypto.SlotStore
 import io.github.brunogutierre.bitpocket.core.crypto.UnlockService
+import io.github.brunogutierre.bitpocket.core.crypto.writeAtomically
 import io.github.brunogutierre.bitpocket.core.onboarding.OnboardingDraft
 import io.github.brunogutierre.bitpocket.core.seed.MnemonicService
 import io.github.brunogutierre.bitpocket.core.session.AutoLocker
@@ -67,6 +68,17 @@ class AppContainer(
     val seedCipher: SeedCipher by lazy { SeedCipher() }
 
     val biometricSeedOpener: BiometricSeedOpener by lazy { BiometricSeedOpener(seedCipher) }
+
+    private fun vaultBackupFile(): File? = session.wallet?.dir?.let { File(it, "vault-backup.bpvb") }
+
+    /** Keeps the Vault backup next to the wallet databases, so Settings can export it again. */
+    fun keepVaultBackup(bytes: ByteArray) {
+        val file = vaultBackupFile() ?: return
+        file.parentFile?.mkdirs()
+        writeAtomically(file, bytes)
+    }
+
+    fun vaultBackup(): ByteArray? = vaultBackupFile()?.takeIf { it.isFile }?.readBytes()
 
     fun biometricAvailable(): Boolean = BiometricAvailability.status(appContext) == BiometricStatus.AVAILABLE
 

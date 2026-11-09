@@ -45,6 +45,8 @@ import io.github.brunogutierre.bitpocket.ui.send.SendScreen
 import io.github.brunogutierre.bitpocket.ui.settings.ChangePinScreen
 import io.github.brunogutierre.bitpocket.ui.settings.GuardrailsScreen
 import io.github.brunogutierre.bitpocket.ui.settings.SettingsScreen
+import io.github.brunogutierre.bitpocket.ui.vault.VaultSetupScreen
+import io.github.brunogutierre.bitpocket.vault.VaultSetupViewModel
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 
@@ -188,6 +190,9 @@ fun BitPocketNavHost(
                         onBack = back,
                         onChangePin = { backStack.add(ChangePin) },
                         onGuardrails = { backStack.add(GuardrailsSettings) },
+                        onSetUpVault = { backStack.add(VaultSetup(importing = false)) },
+                        onImportVault = { backStack.add(VaultSetup(importing = true)) },
+                        vaultBackup = container::vaultBackup,
                         onLock = {
                             container.session.lock()
                             resetTo(Lock)
@@ -203,6 +208,13 @@ fun BitPocketNavHost(
                             onBack = back,
                         )
                     }
+                }
+                entry<VaultSetup> { route ->
+                    VaultSetupScreen(
+                        viewModel { VaultSetupViewModel(container.walletAccess, container.mnemonicService, container::keepVaultBackup) },
+                        importing = route.importing,
+                        onClose = back,
+                    )
                 }
                 entry<ChangePin> {
                     ChangePinScreen(viewModel { ChangePinViewModel(container.walletAccess) }, onBack = back, onChanged = back)
