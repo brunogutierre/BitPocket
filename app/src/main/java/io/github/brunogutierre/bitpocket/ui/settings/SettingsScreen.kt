@@ -103,6 +103,7 @@ private fun SettingsList(
                     )
                 },
             )
+            Entry(stringResource(R.string.settings_auto_lock), stringResource(state.autoLock.label()), viewModel::openAutoLock)
             Entry(
                 stringResource(R.string.settings_show_phrase),
                 stringResource(R.string.settings_show_phrase_body),
