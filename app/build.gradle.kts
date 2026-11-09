@@ -74,6 +74,8 @@ dependencies {
 
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    // ProcessLifecycleOwner: app-wide foreground/background for auto-lock.
+    implementation(libs.androidx.lifecycle.process)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.tooling.preview)

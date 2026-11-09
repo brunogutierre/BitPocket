@@ -13,6 +13,7 @@ import io.github.brunogutierre.bitpocket.core.crypto.SlotStore
 import io.github.brunogutierre.bitpocket.core.crypto.UnlockService
 import io.github.brunogutierre.bitpocket.core.onboarding.OnboardingDraft
 import io.github.brunogutierre.bitpocket.core.seed.MnemonicService
+import io.github.brunogutierre.bitpocket.core.session.AutoLocker
 import io.github.brunogutierre.bitpocket.core.session.LaunchState
 import io.github.brunogutierre.bitpocket.core.session.Session
 import io.github.brunogutierre.bitpocket.core.session.SlotWalletAccess
@@ -52,6 +53,8 @@ class AppContainer(
 
     /** The unlocked wallet, in memory only. */
     val session = Session()
+
+    val autoLocker = AutoLocker(session)
 
     /** Watch-only wallet databases live next to the slots, in `wallets/<id>/`. */
     private val walletOpener = BdkWalletOpener(storageDir) { network -> EsploraChainClient(network.esploraBaseUrl) }
