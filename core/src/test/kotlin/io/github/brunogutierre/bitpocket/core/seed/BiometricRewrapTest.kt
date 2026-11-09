@@ -53,7 +53,7 @@ class BiometricRewrapTest {
         }
 }
 
-private class FakeBiometricSeedVault : BiometricSeedVault {
+class FakeBiometricSeedVault : BiometricSeedVault {
     val calls = mutableListOf<String>()
     var failSeal = false
 
