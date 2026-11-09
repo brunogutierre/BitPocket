@@ -80,6 +80,9 @@ object GuardrailsPolicy {
     /**
      * Applies the strictest of current and [requested] right away and, when [requested] loosens
      * anything, schedules it for [Guardrails.WINDOW_BLOCKS] blocks after [tipHeight].
+     *
+     * @throws IllegalStateException when loosening without a synced tip: counting from height 0
+     *   would let the loosening apply at the very next sync.
      */
     fun change(
         settings: WalletSettings,
@@ -88,9 +91,17 @@ object GuardrailsPolicy {
     ): WalletSettings {
         val current = effective(settings, tipHeight)
         val immediate = current.tightest(requested)
+        if (immediate != requested) check(tipHeight > 0) { "Sync before loosening the guardrails" }
         val scheduled = if (immediate == requested) null else ScheduledGuardrails(requested, tipHeight + Guardrails.WINDOW_BLOCKS)
         return settings.copy(guardrails = immediate, scheduledGuardrails = scheduled)
     }
+
+    /** Whether [requested] relaxes anything compared with what is in force at [tipHeight]. */
+    fun loosens(
+        settings: WalletSettings,
+        requested: Guardrails,
+        tipHeight: Int,
+    ): Boolean = effective(settings, tipHeight).tightest(requested) != requested
 
     /** The guardrails in force at [tipHeight]. */
     fun effective(

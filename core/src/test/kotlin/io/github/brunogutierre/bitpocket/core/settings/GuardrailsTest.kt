@@ -1,7 +1,9 @@
 package io.github.brunogutierre.bitpocket.core.settings
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 
@@ -58,12 +60,22 @@ class GuardrailsTest {
 
     @Test
     fun `changing again starts from what is in force, and tightening cancels a pending loosening`() {
-        val pending = GuardrailsPolicy.change(WalletSettings(guardrails = strict), Guardrails(), tipHeight = 0)
+        val pending = GuardrailsPolicy.change(WalletSettings(guardrails = strict), Guardrails(), tipHeight = 5)
 
         val cancelled = GuardrailsPolicy.change(pending, strict, tipHeight = 10)
 
         assertEquals(strict, cancelled.guardrails)
         assertNull(cancelled.scheduledGuardrails)
+    }
+
+    @Test
+    fun `loosening needs a synced tip, tightening does not`() {
+        val settings = WalletSettings(guardrails = strict)
+
+        assertThrows<IllegalStateException> { GuardrailsPolicy.change(settings, Guardrails(), tipHeight = 0) }
+        assertEquals(strict, GuardrailsPolicy.change(WalletSettings(), strict, tipHeight = 0).guardrails)
+        assertTrue(GuardrailsPolicy.loosens(settings, Guardrails(), 10))
+        assertFalse(GuardrailsPolicy.loosens(settings, strict.copy(perTxLimitSats = 1), 10))
     }
 
     @Test
