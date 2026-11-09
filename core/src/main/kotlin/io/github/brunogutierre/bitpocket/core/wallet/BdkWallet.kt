@@ -5,6 +5,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.bitcoindevkit.Descriptor
+import org.bitcoindevkit.EsploraException
 import org.bitcoindevkit.KeychainKind
 import org.bitcoindevkit.LoadWithPersistException
 import org.bitcoindevkit.PersistenceException
@@ -23,9 +24,9 @@ class BdkWallet internal constructor(
     private val wallet: Wallet,
     private val persister: Persister,
     override val network: SupportedNetwork,
+    private val chain: ChainClient,
     private val dispatcher: CoroutineDispatcher = serialIoDispatcher(),
-) : WalletPort,
-    AutoCloseable {
+) : PocketWallet {
     override suspend fun balance(): Balance =
         onWallet {
             val balance = wallet.balance()
@@ -42,7 +43,26 @@ class BdkWallet internal constructor(
             ReceiveAddress(index = info.index.toInt(), address = info.address.toString())
         }
 
+    /** A full scan the first time (local chain still at genesis), then only revealed scripts. */
+    override suspend fun sync() =
+        onWallet {
+            val update =
+                try {
+                    if (wallet.latestCheckpoint().height == 0u) {
+                        wallet.startFullScan().build().use { chain.fullScan(it) }
+                    } else {
+                        wallet.startSyncWithRevealedSpks().build().use { chain.sync(it) }
+                    }
+                } catch (e: EsploraException) {
+                    throw ChainUnavailableException(e)
+                }
+            update.use { wallet.applyUpdate(it) }
+            wallet.persist(persister)
+            Unit
+        }
+
     override fun close() {
+        chain.close()
         wallet.close()
         persister.close()
     }
@@ -61,15 +81,16 @@ class BdkWallet internal constructor(
             dir: File,
             descriptors: PublicDescriptors,
             network: SupportedNetwork,
+            chain: ChainClient,
         ): BdkWallet {
             check(dir.isDirectory || dir.mkdirs()) { "Cannot create $dir" }
             val db = File(dir, DB_FILE)
             val kind = network.toBdkNetworkKind()
             return Descriptor(descriptors.external, kind).use { external ->
                 Descriptor(descriptors.internal, kind).use { internal ->
-                    loadOrNull(db, external, internal, network)
+                    loadOrNull(db, external, internal, network, chain)
                         ?: Persister.newSqlite(db.path).let { persister ->
-                            BdkWallet(Wallet(external, internal, network.toBdkNetwork(), persister), persister, network)
+                            BdkWallet(Wallet(external, internal, network.toBdkNetwork(), persister), persister, network, chain)
                         }
                 }
             }
@@ -80,12 +101,13 @@ class BdkWallet internal constructor(
             external: Descriptor,
             internal: Descriptor,
             network: SupportedNetwork,
+            chain: ChainClient,
         ): BdkWallet? {
             if (!db.exists()) return null
             var persister: Persister? = null
             return try {
                 persister = Persister.newSqlite(db.path)
-                BdkWallet(Wallet.load(external, internal, persister), persister, network)
+                BdkWallet(Wallet.load(external, internal, persister), persister, network, chain)
             } catch (e: LoadWithPersistException) {
                 discard(db, persister)
             } catch (e: PersistenceException) {

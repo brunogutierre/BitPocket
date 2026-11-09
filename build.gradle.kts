@@ -70,6 +70,8 @@ kover {
                     "*.MainActivity",
                     "*.BitPocketApp",
                     "*.MainActivityKt",
+                    // Thin pass-through to BDK's Esplora client: needs the network (opt-in live test).
+                    "*.EsploraChainClient",
                 )
                 annotatedBy("androidx.compose.runtime.Composable")
             }

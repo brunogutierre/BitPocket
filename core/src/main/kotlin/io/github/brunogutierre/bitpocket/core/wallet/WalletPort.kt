@@ -26,8 +26,19 @@ interface WalletPort {
     suspend fun nextReceiveAddress(): ReceiveAddress
 }
 
-/** Synchronizes wallet state with the chain backend (Esplora). */
-interface SyncPort {
-    /** Throws on network/backend failure; callers map it to UI error state. */
+/** The chain backend of a wallet (Esplora). Fee rates and broadcast arrive with sending. */
+interface ChainPort {
+    /** Fetches new chain data. Throws [ChainUnavailableException] when the backend cannot be reached. */
     suspend fun sync()
 }
+
+/** An open pocket: what the UI reads and refreshes. Closed when the session locks. */
+interface PocketWallet :
+    WalletPort,
+    ChainPort,
+    AutoCloseable
+
+/** The chain backend failed (offline, timeout, HTTP error); the user can retry. */
+class ChainUnavailableException(
+    cause: Throwable,
+) : Exception("Chain backend unavailable", cause)

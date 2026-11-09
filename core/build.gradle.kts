@@ -33,8 +33,11 @@ dependencies {
     testRuntimeOnly(libs.junit.platform.launcher)
 }
 
+val includeLiveTests = providers.gradleProperty("live").isPresent
+
 tasks.test {
-    useJUnitPlatform()
+    // Tests tagged "live" talk to public Signet servers: opt in with -Plive, never in CI.
+    useJUnitPlatform { if (!includeLiveTests) excludeTags("live") }
     // BDK loads its native library through JNA; recent JDKs warn unless native access is enabled.
     jvmArgs("--enable-native-access=ALL-UNNAMED")
 }
