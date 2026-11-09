@@ -50,6 +50,19 @@ class FakePocketWallet(
         return plans.removeFirstOrNull() ?: throw SpendException(SpendError.INSUFFICIENT_FUNDS)
     }
 
+    /** Seeds passed to [send] (copied, since callers wipe theirs); [sendError] fails the send. */
+    val sentWith = mutableListOf<ByteArray>()
+    var sendError: Exception? = null
+
+    override suspend fun send(
+        plan: SpendPlan,
+        seedEntropy: ByteArray,
+    ): String {
+        sendError?.let { throw it }
+        sentWith += seedEntropy.copyOf()
+        return "txid-${sentWith.size}"
+    }
+
     override fun close() {
         closed = true
     }

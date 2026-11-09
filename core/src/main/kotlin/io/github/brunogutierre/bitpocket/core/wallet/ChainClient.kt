@@ -3,6 +3,7 @@ package io.github.brunogutierre.bitpocket.core.wallet
 import org.bitcoindevkit.EsploraClient
 import org.bitcoindevkit.FullScanRequest
 import org.bitcoindevkit.SyncRequest
+import org.bitcoindevkit.Transaction
 import org.bitcoindevkit.Update
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -13,6 +14,8 @@ interface ChainClient : AutoCloseable {
     fun fullScan(request: FullScanRequest): Update
 
     fun sync(request: SyncRequest): Update
+
+    fun broadcast(transaction: Transaction)
 
     /** Fee estimates: confirmation target in blocks -> sat/vB. Throws [java.io.IOException] on failure. */
     fun feeEstimates(): Map<Int, Double>
@@ -30,6 +33,8 @@ class EsploraChainClient(
     override fun fullScan(request: FullScanRequest): Update = client.fullScan(request, STOP_GAP, PARALLEL_REQUESTS)
 
     override fun sync(request: SyncRequest): Update = client.sync(request, PARALLEL_REQUESTS)
+
+    override fun broadcast(transaction: Transaction) = client.broadcast(transaction)
 
     /**
      * Fetched directly instead of through BDK: mempool.space answers this deprecated endpoint with

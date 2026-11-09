@@ -230,8 +230,25 @@ private fun amountErrorText(error: AmountError): String =
 @Composable
 private fun spendErrorText(error: SpendError): String =
     when (error) {
-        SpendError.INSUFFICIENT_FUNDS -> stringResource(R.string.send_error_insufficient)
-        SpendError.BELOW_DUST -> dustText()
-        SpendError.INVALID_ADDRESS -> stringResource(R.string.send_error_not_an_address)
-        SpendError.UNSAFE_INPUT, SpendError.OTHER -> stringResource(R.string.send_error_other)
+        SpendError.INSUFFICIENT_FUNDS -> {
+            stringResource(R.string.send_error_insufficient)
+        }
+
+        SpendError.BELOW_DUST -> {
+            dustText()
+        }
+
+        SpendError.INVALID_ADDRESS -> {
+            stringResource(R.string.send_error_not_an_address)
+        }
+
+        SpendError.REJECTED -> {
+            stringResource(R.string.send_error_rejected)
+        }
+
+        SpendError.UNSAFE_INPUT, SpendError.SIGNING_FAILED, SpendError.PLAN_MISMATCH, SpendError.OTHER -> {
+            stringResource(
+                R.string.send_error_other,
+            )
+        }
     }

@@ -21,6 +21,7 @@ import org.bitcoindevkit.ChainPosition
 import org.bitcoindevkit.CreateTxException
 import org.bitcoindevkit.Descriptor
 import org.bitcoindevkit.EsploraException
+import org.bitcoindevkit.ExtractTxException
 import org.bitcoindevkit.FeeRate
 import org.bitcoindevkit.KeychainKind
 import org.bitcoindevkit.LoadWithPersistException
@@ -28,8 +29,10 @@ import org.bitcoindevkit.PersistenceException
 import org.bitcoindevkit.Persister
 import org.bitcoindevkit.Psbt
 import org.bitcoindevkit.Script
+import org.bitcoindevkit.Transaction
 import org.bitcoindevkit.TxBuilder
 import org.bitcoindevkit.Txid
+import org.bitcoindevkit.UnconfirmedTx
 import org.bitcoindevkit.Wallet
 import java.io.File
 import java.io.IOException
@@ -161,6 +164,67 @@ class BdkWallet internal constructor(
                 }
             }
         }
+
+    override suspend fun send(
+        plan: SpendPlan,
+        seedEntropy: ByteArray,
+    ): String =
+        onWallet {
+            Psbt(plan.psbtBase64).use { psbt ->
+                SpendGuard.check(psbt, wallet)
+                if (!SeedSigner.sign(wallet, psbt, seedEntropy, network)) throw SpendException(SpendError.SIGNING_FAILED)
+                val tx =
+                    try {
+                        psbt.extractTx() // also refuses an absurd fee rate
+                    } catch (e: ExtractTxException) {
+                        throw SpendException(SpendError.OTHER, e)
+                    }
+                tx.use {
+                    verifyAgainstPlan(it, psbt, plan)
+                    broadcast(it)
+                    // Record it now, so balance and history show it before the next sync.
+                    wallet.applyUnconfirmedTxs(listOf(UnconfirmedTx(it, System.currentTimeMillis().toULong() / 1000u)))
+                    wallet.persist(persister)
+                    it.computeTxid().use { txid -> txid.toString() }
+                }
+            }
+        }
+
+    /** The signed transaction must be exactly what the user reviewed. */
+    private fun verifyAgainstPlan(
+        tx: Transaction,
+        psbt: Psbt,
+        plan: SpendPlan,
+    ) {
+        val recipientScript = Address(plan.recipient, network.toBdkNetwork()).use { it.scriptPubkey().use { s -> s.toBytes() } }
+        val outputs = tx.output()
+        val toRecipient = outputs.filter { it.scriptPubkey.toBytes().contentEquals(recipientScript) }.sumOf { it.value.toSat().toLong() }
+        val change =
+            outputs
+                .filter {
+                    wallet.derivationOfSpk(it.scriptPubkey)?.keychain == KeychainKind.INTERNAL
+                }.sumOf { it.value.toSat().toLong() }
+        val total = outputs.sumOf { it.value.toSat().toLong() }
+        val matches =
+            toRecipient == plan.amountSats &&
+                change == plan.changeSats &&
+                total == plan.amountSats + plan.changeSats &&
+                psbt.fee().toLong() == plan.feeSats &&
+                tx.input().size == plan.inputCount
+        if (!matches) throw SpendException(SpendError.PLAN_MISMATCH)
+    }
+
+    private fun broadcast(tx: Transaction) {
+        try {
+            chain.broadcast(tx)
+        } catch (e: EsploraException.HttpResponse) {
+            // 4xx: the backend answered and refused the transaction; retrying will not help.
+            if (e.status.toInt() in 400..499) throw SpendException(SpendError.REJECTED, e)
+            throw ChainUnavailableException(e)
+        } catch (e: EsploraException) {
+            throw ChainUnavailableException(e)
+        }
+    }
 
     private fun buildPsbt(
         script: Script,
