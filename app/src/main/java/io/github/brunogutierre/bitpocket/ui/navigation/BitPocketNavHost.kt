@@ -127,7 +127,11 @@ fun BitPocketNavHost(
                     LockScreen(viewModel { LockViewModel(container.walletAccess) }, onUnlocked = { resetTo(Home) })
                 }
                 entry<Home> {
-                    HomeScreen(viewModel { HomeViewModel(container.session) }, onLocked = { resetTo(Lock) })
+                    // Null only for a moment after process death: the route guard then shows Lock.
+                    val wallet = container.session.wallet
+                    if (wallet != null) {
+                        HomeScreen(viewModel { HomeViewModel(wallet.spending, container.session::lock) }, onLocked = { resetTo(Lock) })
+                    }
                 }
             },
     )
