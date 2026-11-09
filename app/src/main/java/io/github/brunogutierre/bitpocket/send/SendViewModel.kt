@@ -22,18 +22,16 @@ import io.github.brunogutierre.bitpocket.core.session.SeedOutcome
 import io.github.brunogutierre.bitpocket.core.session.WalletAccess
 import io.github.brunogutierre.bitpocket.core.wallet.ChainUnavailableException
 import io.github.brunogutierre.bitpocket.core.wallet.PocketWallet
+import io.github.brunogutierre.bitpocket.security.LockoutCountdown
 import io.github.brunogutierre.bitpocket.security.PinBuffer
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.time.Duration
 
 enum class FeeSpeed { FAST, NORMAL, SLOW }
 
@@ -103,7 +101,7 @@ class SendViewModel(
     private val _state = MutableStateFlow(SendUiState())
     val state: StateFlow<SendUiState> = _state.asStateFlow()
     private val pin = PinBuffer()
-    private var countdown: Job? = null
+    private val countdown = LockoutCountdown(viewModelScope) { seconds -> _state.update { it.copy(lockoutSeconds = seconds) } }
 
     init {
         loadFees()
@@ -220,11 +218,11 @@ class SendViewModel(
 
                 is SeedOutcome.WrongPin -> {
                     _state.update { it.copy(wrongPin = true, pinErrorSignal = it.pinErrorSignal + 1) }
-                    startCountdown(outcome.lockout)
+                    countdown.start(outcome.lockout)
                 }
 
                 is SeedOutcome.LockedOut -> {
-                    startCountdown(outcome.remaining)
+                    countdown.start(outcome.remaining)
                 }
 
                 SeedOutcome.Failed -> {
@@ -250,21 +248,6 @@ class SendViewModel(
                 entropy.wipe()
             }
         }
-    }
-
-    private fun startCountdown(duration: Duration) {
-        if (duration.isZero) return
-        countdown?.cancel()
-        countdown =
-            viewModelScope.launch {
-                var seconds = (duration.toMillis() + 999) / 1000
-                while (seconds > 0) {
-                    _state.update { it.copy(lockoutSeconds = seconds) }
-                    delay(1000)
-                    seconds--
-                }
-                _state.update { it.copy(lockoutSeconds = 0) }
-            }
     }
 
     override fun onCleared() = pin.clear()
