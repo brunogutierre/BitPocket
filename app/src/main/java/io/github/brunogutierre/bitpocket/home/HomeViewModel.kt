@@ -19,6 +19,8 @@ data class HomeUiState(
     val history: List<HistoryItem> = emptyList(),
     val syncing: Boolean = false,
     val syncFailed: Boolean = false,
+    /** Null while there is no Vault (Home then offers to set it up). */
+    val vaultBalance: Balance? = null,
 )
 
 /**
@@ -28,6 +30,8 @@ data class HomeUiState(
 class HomeViewModel(
     private val pocket: PocketWallet,
     private val lockSession: () -> Unit,
+    /** The Vault pocket, read each time: it can be set up while Home is on the back stack. */
+    private val vault: () -> PocketWallet? = { null },
 ) : ViewModel() {
     val network: SupportedNetwork = pocket.network
     private val _state = MutableStateFlow(HomeUiState())
@@ -45,6 +49,7 @@ class HomeViewModel(
             val failed =
                 try {
                     pocket.sync()
+                    vault()?.sync()
                     false
                 } catch (e: ChainUnavailableException) {
                     true
@@ -64,6 +69,7 @@ class HomeViewModel(
     private suspend fun readWallet() {
         val balance = pocket.balance()
         val history = pocket.history()
-        _state.update { it.copy(balance = balance, history = history) }
+        val vaultBalance = vault()?.balance()
+        _state.update { it.copy(balance = balance, history = history, vaultBalance = vaultBalance) }
     }
 }

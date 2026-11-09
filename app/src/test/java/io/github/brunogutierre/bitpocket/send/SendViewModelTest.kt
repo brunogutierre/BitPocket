@@ -48,7 +48,7 @@ class SendViewModelTest {
         pocket: FakePocketWallet,
         biometricSeed: ByteArray? = null,
         settings: WalletSettings = WalletSettings(),
-    ) = SendViewModel(pocket, access, biometricSeed, settings, main.dispatcher)
+    ) = SendViewModel(pocket, access, biometricSeed, settings, workDispatcher = main.dispatcher)
 
     /** A view model already on REVIEW with [plan]. */
     private fun reviewing(
@@ -285,6 +285,13 @@ class SendViewModelTest {
         assertEquals(SendStage.EDIT, vm.state.value.stage)
         assertEquals("bitcoin:$ADDRESS?amount=0.0005", vm.state.value.addressText)
         assertEquals("50000", vm.state.value.amountText)
+    }
+
+    @Test
+    fun `Move to Vault starts with the Vault address`() {
+        val vm = SendViewModel(pocket, access, null, WalletSettings(), { ADDRESS }, main.dispatcher)
+
+        assertEquals(ADDRESS, vm.state.value.addressText)
     }
 
     private companion object {

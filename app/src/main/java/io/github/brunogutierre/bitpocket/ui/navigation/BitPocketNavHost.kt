@@ -45,8 +45,10 @@ import io.github.brunogutierre.bitpocket.ui.send.SendScreen
 import io.github.brunogutierre.bitpocket.ui.settings.ChangePinScreen
 import io.github.brunogutierre.bitpocket.ui.settings.GuardrailsScreen
 import io.github.brunogutierre.bitpocket.ui.settings.SettingsScreen
+import io.github.brunogutierre.bitpocket.ui.vault.VaultScreen
 import io.github.brunogutierre.bitpocket.ui.vault.VaultSetupScreen
 import io.github.brunogutierre.bitpocket.vault.VaultSetupViewModel
+import io.github.brunogutierre.bitpocket.vault.VaultViewModel
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 
@@ -157,24 +159,56 @@ fun BitPocketNavHost(
                     val wallet = container.session.wallet
                     if (wallet != null) {
                         HomeScreen(
-                            viewModel { HomeViewModel(wallet.spending, container.session::lock) },
-                            onReceive = { backStack.add(Receive) },
-                            onSend = { backStack.add(Send) },
+                            viewModel { HomeViewModel(wallet.spending, container.session::lock) { container.session.wallet?.vault } },
+                            onReceive = { backStack.add(Receive()) },
+                            onSend = { backStack.add(Send()) },
+                            onVault = { backStack.add(VaultHome) },
+                            onSetUpVault = { backStack.add(VaultSetup(importing = false)) },
                             onSettings = { backStack.add(Settings) },
                             onTransaction = { txid -> backStack.add(TransactionDetails(txid)) },
                             onLocked = { resetTo(Lock) },
                         )
                     }
                 }
-                entry<Receive> {
+                entry<Receive> { route ->
                     val wallet = container.session.wallet
-                    if (wallet != null) ReceiveScreen(viewModel { ReceiveViewModel(wallet.spending) }, onBack = back)
+                    val pocket = if (route.vault) wallet?.vault else wallet?.spending
+                    if (pocket != null) ReceiveScreen(viewModel { ReceiveViewModel(pocket) }, onBack = back)
                 }
-                entry<Send> {
+                entry<VaultHome> {
+                    val wallet = container.session.wallet
+                    val vault = wallet?.vault
+                    val config = wallet?.settings?.vault
+                    if (vault != null && config != null) {
+                        VaultScreen(
+                            viewModel { VaultViewModel(vault, config) },
+                            onBack = back,
+                            onReceive = { backStack.add(Receive(vault = true)) },
+                            onMoveIn = { backStack.add(Send(toVault = true)) },
+                            onTransaction = { txid -> backStack.add(TransactionDetails(txid, vault = true)) },
+                        )
+                    }
+                }
+                entry<Send> { route ->
                     val wallet = container.session.wallet
                     if (wallet != null) {
                         SendScreen(
-                            viewModel { SendViewModel(wallet.spending, container.walletAccess, wallet.biometricSeed, wallet.settings) },
+                            viewModel {
+                                val prefill: (suspend () -> String?)? =
+                                    if (route.toVault) {
+                                        (
+                                            {
+                                                container.session.wallet
+                                                    ?.vault
+                                                    ?.nextReceiveAddress()
+                                                    ?.address
+                                            }
+                                        )
+                                    } else {
+                                        null
+                                    }
+                                SendViewModel(wallet.spending, container.walletAccess, wallet.biometricSeed, wallet.settings, prefill)
+                            },
                             biometricOpener = container.biometricSeedOpener,
                             onBack = back,
                             onDone = back,
@@ -221,8 +255,11 @@ fun BitPocketNavHost(
                 }
                 entry<TransactionDetails> { route ->
                     val wallet = container.session.wallet
-                    if (wallet != null) {
-                        TransactionDetailsScreen(viewModel { TransactionDetailsViewModel(wallet.spending, route.txid) }, onBack = back)
+                    val pocket = if (route.vault) wallet?.vault else wallet?.spending
+                    if (pocket !=
+                        null
+                    ) {
+                        TransactionDetailsScreen(viewModel { TransactionDetailsViewModel(pocket, route.txid) }, onBack = back)
                     }
                 }
             },

@@ -122,6 +122,8 @@ class SendViewModel(
     val biometricSeed: ByteArray?,
     /** The session's settings, for the guardrails in force. */
     private val settings: WalletSettings = WalletSettings(),
+    /** An address to start with, e.g. the Vault's for "Move to Vault". */
+    private val prefill: (suspend () -> String?)? = null,
     private val workDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
     val network: SupportedNetwork = pocket.network
@@ -132,6 +134,7 @@ class SendViewModel(
 
     init {
         loadFees()
+        prefill?.let { viewModelScope.launch { it()?.let(::onAddressChange) } }
     }
 
     fun loadFees() {

@@ -1,5 +1,6 @@
 package io.github.brunogutierre.bitpocket.ui.home
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -13,6 +14,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -47,6 +49,8 @@ fun HomeScreen(
     onReceive: () -> Unit,
     onSend: () -> Unit,
     onSettings: () -> Unit,
+    onVault: () -> Unit,
+    onSetUpVault: () -> Unit,
     onTransaction: (txid: String) -> Unit,
     onLocked: () -> Unit,
 ) {
@@ -84,6 +88,7 @@ fun HomeScreen(
                         PrimaryButton(stringResource(R.string.home_send), onClick = onSend, modifier = Modifier.weight(1f))
                     }
                 }
+                item { VaultCard(state.vaultBalance, onVault, onSetUpVault) }
                 item { Text(stringResource(R.string.home_activity), style = MaterialTheme.typography.titleMedium) }
                 if (state.history.isEmpty()) {
                     item {
@@ -138,4 +143,23 @@ private fun BalanceHeader(balance: Balance?) {
             }
         }
     }
+}
+
+/** The Vault pocket at a glance, or an invitation to set it up. */
+@Composable
+private fun VaultCard(
+    balance: Balance?,
+    onOpen: () -> Unit,
+    onSetUp: () -> Unit,
+) {
+    ListItem(
+        headlineContent = { Text(stringResource(R.string.vault_title)) },
+        supportingContent = {
+            Text(if (balance == null) stringResource(R.string.vault_card_set_up) else BitcoinFormat.sats(balance.totalSats))
+        },
+        modifier =
+            Modifier
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.shapes.medium)
+                .clickable(onClick = if (balance == null) onSetUp else onOpen),
+    )
 }
