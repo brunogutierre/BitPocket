@@ -65,6 +65,7 @@ A layered-security Bitcoin wallet for Android, built as a study project.
 | Watch-only wallets + short-lived signers, Esplora sync | Keys never persisted by BDK; no background access | [ADR 0004](docs/adr/0004-watch-only-wallets-and-esplora-sync.md) |
 | Manual DI (`AppContainer`) | ~20 classes do not need a framework | — |
 | QR codes with zxing `core`, uppercase BIP21 | Pure Java (JVM-tested, no Play Services); alphanumeric mode makes smaller codes | — |
+| Guardrails: tighten now, loosen after 144 blocks | Someone holding the unlocked phone cannot raise a limit and spend at once; block height cannot be faked like the clock | [ADR 0006](docs/adr/0006-guardrails-anchored-to-block-height.md) |
 | Address fingerprint: 3 BIP39 words + mirrored identicon from SHA-256 | ~57 bits a human can compare by eye or voice; the scheme is frozen by a test vector | — |
 | At most 10 unused receive addresses | A restore scans until 20 unused in a row (stop gap) | — |
 | SpendGuard on every spend: confirmed coins only | Unconfirmed `older()` spends abort the process in BDK 3.1.0 | [ADR 0002](docs/adr/0002-vault-policy-and-signing.md) |
