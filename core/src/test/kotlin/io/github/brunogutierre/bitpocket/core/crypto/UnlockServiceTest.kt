@@ -52,6 +52,20 @@ class UnlockServiceTest {
     }
 
     @Test
+    fun `re-authenticating for one slot treats the other slot's PIN as a wrong PIN`() {
+        givenSlots()
+        repeat(4) { wrongPin() }
+
+        // Counts as the 5th failure (lockout starts), exactly like a wrong PIN: no counter reset.
+        val result = service.unlock("2222".toCharArray(), expected = SlotId.A)
+
+        assertEquals(UnlockResult.Wrong(Duration.ofSeconds(30)), result)
+        assertEquals(5, attempts.read().failedAttempts)
+        clock.advanceSeconds(30)
+        assertEquals(SlotId.A, (service.unlock("1111".toCharArray(), expected = SlotId.A) as UnlockResult.Unlocked).slot)
+    }
+
+    @Test
     fun `locks out after the free attempts, rewriting the record on every attempt`() {
         givenSlots()
         repeat(4) { assertEquals(UnlockResult.Wrong(Duration.ZERO), wrongPin()) }

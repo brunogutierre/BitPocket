@@ -42,27 +42,38 @@ class SlotWalletAccessTest {
         assertTrue(SlotId.A in storage.files && SlotId.B in storage.files)
         val wallet = session.wallet!!
         assertEquals(SlotId.A, wallet.slot)
-        assertArrayEquals(entropy, wallet.payload.seedEntropy)
-        assertNull(wallet.payload.biometricSeed)
-        assertEquals(SupportedNetwork.TESTNET4, wallet.payload.network)
+        assertNull(wallet.biometricSeed)
+        assertEquals(SupportedNetwork.TESTNET4, wallet.network)
         assertSame(opener.opened.single(), wallet.spending)
         assertEquals(SupportedNetwork.TESTNET4, wallet.spending.network)
     }
 
     @Test
-    fun `locking wipes the seed and unlocking restores it`() {
+    fun `the session keeps no seed once the pockets are open`() {
         val access = access()
         access.create("123456".toCharArray(), entropy, SupportedNetwork.SIGNET)
-        val unlockedSeed = session.wallet!!.payload.seedEntropy
-
         session.lock()
 
-        assertFalse(session.isUnlocked)
-        assertArrayEquals(ByteArray(16), unlockedSeed)
-        assertTrue(opener.opened.single().closed)
         assertEquals(UnlockOutcome.WrongPin(Duration.ZERO), access.unlock("000000".toCharArray()))
         assertEquals(UnlockOutcome.Unlocked, access.unlock("123456".toCharArray()))
-        assertArrayEquals(entropy, session.wallet!!.payload.seedEntropy)
+
+        // The opener saw the real seed, which was wiped right after the pockets opened.
+        assertEquals(2, opener.payloads.size)
+        assertTrue(opener.payloads.all { it.seedEntropy.contentEquals(ByteArray(16)) })
+        assertEquals(listOf(true, false), opener.opened.map { it.closed })
+    }
+
+    @Test
+    fun `signing re-enters the session PIN to get the seed`() {
+        val access = access()
+        access.create("123456".toCharArray(), entropy, SupportedNetwork.SIGNET)
+
+        val seed = access.seedForSigning("123456".toCharArray())
+        assertArrayEquals(entropy, (seed as SeedOutcome.Seed).entropy)
+        assertEquals(SeedOutcome.WrongPin(Duration.ZERO), access.seedForSigning("000000".toCharArray()))
+
+        session.lock()
+        assertEquals(SeedOutcome.Failed, access.seedForSigning("123456".toCharArray()))
     }
 
     @Test

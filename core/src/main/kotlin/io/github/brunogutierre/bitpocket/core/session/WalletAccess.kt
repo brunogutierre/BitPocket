@@ -28,6 +28,24 @@ sealed interface UnlockOutcome {
     data object Failed : UnlockOutcome
 }
 
+/** The seed for one signing operation. */
+sealed interface SeedOutcome {
+    /** The caller wipes [entropy] as soon as it has signed. */
+    class Seed(
+        val entropy: ByteArray,
+    ) : SeedOutcome
+
+    data class WrongPin(
+        val lockout: Duration,
+    ) : SeedOutcome
+
+    data class LockedOut(
+        val remaining: Duration,
+    ) : SeedOutcome
+
+    data object Failed : SeedOutcome
+}
+
 /** Creates the wallet and unlocks it into the [Session]. Blocking and slow: call off the main thread. */
 interface WalletAccess {
     fun create(
@@ -37,6 +55,12 @@ interface WalletAccess {
     )
 
     fun unlock(pin: CharArray): UnlockOutcome
+
+    /**
+     * Re-enters the PIN of the open session to get its seed for signing. It goes through the same
+     * backoff as unlocking, and a PIN of another slot is just a wrong PIN.
+     */
+    fun seedForSigning(pin: CharArray): SeedOutcome
 }
 
 /** [WalletAccess] over the slot store. M1 uses slot A only; slot B stays a decoy. */
@@ -59,7 +83,7 @@ class SlotWalletAccess(
         } finally {
             encoded.wipe()
         }
-        session.open(UnlockedWallet(SlotId.A, payload, opener.open(payload)))
+        openSession(SlotId.A, payload)
     }
 
     override fun unlock(pin: CharArray): UnlockOutcome =
@@ -85,12 +109,50 @@ class SlotWalletAccess(
                 result.payload.wipe()
             }
         return try {
-            session.open(UnlockedWallet(result.slot, payload, opener.open(payload)))
+            openSession(result.slot, payload)
             UnlockOutcome.Unlocked
         } catch (e: Exception) {
             // The wallet database could not be opened (I/O error): not a PIN problem.
-            payload.seedEntropy.wipe()
             UnlockOutcome.Failed
+        }
+    }
+
+    override fun seedForSigning(pin: CharArray): SeedOutcome {
+        val slot = session.wallet?.slot ?: return SeedOutcome.Failed
+        return try {
+            when (val result = unlockService.unlock(pin, expected = slot)) {
+                is UnlockResult.Unlocked -> seedOf(result)
+                is UnlockResult.Wrong -> SeedOutcome.WrongPin(result.lockout)
+                is UnlockResult.LockedOut -> SeedOutcome.LockedOut(result.remaining)
+            }
+        } catch (e: KeyUnavailableException) {
+            SeedOutcome.Failed
+        } catch (e: AuthenticationFailedException) {
+            SeedOutcome.Failed
+        }
+    }
+
+    private fun seedOf(result: UnlockResult.Unlocked): SeedOutcome =
+        try {
+            val payload = SlotPayload.decode(result.payload)
+            payload.biometricSeed?.wipe()
+            SeedOutcome.Seed(payload.seedEntropy)
+        } catch (e: IllegalArgumentException) {
+            SeedOutcome.Failed
+        } finally {
+            result.payload.wipe()
+        }
+
+    /** Opens the pockets, then drops the seed: the session keeps public data only. */
+    private fun openSession(
+        slot: SlotId,
+        payload: SlotPayload,
+    ) {
+        try {
+            val spending = opener.open(payload)
+            session.open(UnlockedWallet(slot, payload.network, payload.biometricSeed, spending))
+        } finally {
+            payload.seedEntropy.wipe()
         }
     }
 }

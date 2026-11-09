@@ -71,10 +71,14 @@ class FakePocketWallet(
 /** Opens a [FakePocketWallet] per unlock (or fails when [failure] is set). */
 class FakeWalletOpener : WalletOpener {
     val opened = mutableListOf<FakePocketWallet>()
+
+    /** The payloads it was given (the same objects, so tests can check they were wiped). */
+    val payloads = mutableListOf<SlotPayload>()
     var failure: Exception? = null
 
     override fun open(payload: SlotPayload): FakePocketWallet {
         failure?.let { throw it }
+        payloads += payload
         return FakePocketWallet(payload.network).also { opened += it }
     }
 }
