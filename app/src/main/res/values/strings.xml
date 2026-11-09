@@ -160,5 +160,9 @@
     <string name="change_pin_current">Enter your current PIN</string>
     <string name="change_pin_current_body">Then choose a new one.</string>
     <string name="change_pin_confirm_body">Enter the new PIN again.</string>
+    <string name="fingerprint_label">Address fingerprint</string>
+    <string name="fingerprint_description">Address fingerprint: %1$s</string>
+    <string name="receive_fingerprint_hint">Ask the sender to check these words and picture before paying.</string>
+    <string name="send_review_fingerprint_hint">Compare with the fingerprint on the recipient\'s screen.</string>
     <string name="pin_too_weak">PIN too easy to guess. Choose another one.</string>
 </resources>

@@ -37,6 +37,7 @@ import io.github.brunogutierre.bitpocket.send.SendStage
 import io.github.brunogutierre.bitpocket.send.SendUiState
 import io.github.brunogutierre.bitpocket.send.SendViewModel
 import io.github.brunogutierre.bitpocket.send.rateFor
+import io.github.brunogutierre.bitpocket.ui.components.AddressFingerprintView
 import io.github.brunogutierre.bitpocket.ui.components.BannerSeverity
 import io.github.brunogutierre.bitpocket.ui.components.PageScaffold
 import io.github.brunogutierre.bitpocket.ui.components.PrimaryButton
@@ -177,6 +178,12 @@ private fun ReviewStage(
     ) {
         ReviewRow(stringResource(R.string.send_review_to)) {
             Text(BitcoinFormat.addressChunks(plan.recipient).joinToString(" "), style = MaterialTheme.monoTypography.address)
+            AddressFingerprintView(plan.recipient)
+            Text(
+                stringResource(R.string.send_review_fingerprint_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         ReviewRow(stringResource(R.string.send_review_amount)) { Amount(plan.amountSats) }
         ReviewRow(stringResource(R.string.send_review_fee, plan.feeRateSatPerVb)) { Amount(plan.feeSats) }

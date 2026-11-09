@@ -35,6 +35,7 @@ import io.github.brunogutierre.bitpocket.core.format.BitcoinFormat
 import io.github.brunogutierre.bitpocket.core.qr.QrCode
 import io.github.brunogutierre.bitpocket.core.qr.QrMatrix
 import io.github.brunogutierre.bitpocket.receive.ReceiveViewModel
+import io.github.brunogutierre.bitpocket.ui.components.AddressFingerprintView
 import io.github.brunogutierre.bitpocket.ui.components.PageScaffold
 import io.github.brunogutierre.bitpocket.ui.components.PrimaryButton
 import io.github.brunogutierre.bitpocket.ui.components.SecondaryButton
@@ -70,6 +71,14 @@ fun ReceiveScreen(
             Text(
                 BitcoinFormat.addressChunks(address).joinToString(" "),
                 style = MaterialTheme.monoTypography.address,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            AddressFingerprintView(address, Modifier.align(Alignment.CenterHorizontally))
+            Text(
+                stringResource(R.string.receive_fingerprint_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
