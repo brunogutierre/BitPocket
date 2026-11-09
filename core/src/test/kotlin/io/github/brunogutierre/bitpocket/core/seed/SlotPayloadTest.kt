@@ -3,7 +3,11 @@ package io.github.brunogutierre.bitpocket.core.seed
 import io.github.brunogutierre.bitpocket.core.crypto.SlotFile
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
 import io.github.brunogutierre.bitpocket.core.settings.AutoLock
+import io.github.brunogutierre.bitpocket.core.settings.Guardrails
+import io.github.brunogutierre.bitpocket.core.settings.ScheduledGuardrails
 import io.github.brunogutierre.bitpocket.core.settings.WalletSettings
+import io.github.brunogutierre.bitpocket.core.vault.HeirTimelock
+import io.github.brunogutierre.bitpocket.core.vault.VaultConfig
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
@@ -46,11 +50,16 @@ class SlotPayloadTest {
     }
 
     @Test
-    fun `the largest payload leaves room for future settings`() {
-        val largest = SlotPayload(ByteArray(32), ByteArray(1024), SupportedNetwork.SIGNET, WalletSettings()).encode()
+    fun `the largest payload, vault included, leaves room for future settings`() {
+        val key = "[73c5da0a/48'/1'/0'/2']tpub" + "x".repeat(107)
+        val vault = VaultConfig(key, key.replace('x', 'y'), key.replace('x', 'z'), HeirTimelock.YEAR)
+        val settings =
+            WalletSettings(guardrails = Guardrails(1, 2), scheduledGuardrails = ScheduledGuardrails(Guardrails(), 1), vault = vault)
+        val largest = SlotPayload(ByteArray(32), ByteArray(1024), SupportedNetwork.SIGNET, settings).encode()
 
-        // Vault keys, guardrails and a custom server URL must still fit in the rest.
-        assertTrue(SlotFile.MAX_PAYLOAD_BYTES - largest.size > 2_500, "${largest.size} bytes")
+        assertEquals(vault, SlotPayload.decode(largest).settings.vault)
+        // A custom server URL and later settings must still fit in the rest.
+        assertTrue(SlotFile.MAX_PAYLOAD_BYTES - largest.size > 2_000, "${largest.size} bytes")
     }
 
     @Test
