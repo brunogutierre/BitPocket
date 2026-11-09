@@ -23,6 +23,8 @@ dependencies {
     compileOnly(libs.bdk.jvm)
     // Argon2id (not available in the JDK or on Android).
     implementation(libs.bouncycastle.prov)
+    // Wallet I/O (SQLite, Esplora) runs on a per-wallet serial dispatcher.
+    implementation(libs.kotlinx.coroutines.core)
 
     testImplementation(libs.bdk.jvm)
     testImplementation(libs.kotlinx.coroutines.test)
