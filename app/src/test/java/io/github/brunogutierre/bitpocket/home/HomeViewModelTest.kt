@@ -4,6 +4,7 @@ import io.github.brunogutierre.bitpocket.FakePocketWallet
 import io.github.brunogutierre.bitpocket.MainDispatcherExtension
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
 import io.github.brunogutierre.bitpocket.core.wallet.Balance
+import io.github.brunogutierre.bitpocket.core.wallet.HistoryItem
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -48,6 +49,22 @@ class HomeViewModelTest {
 
         assertFalse(vm.state.value.syncFailed)
         assertEquals(2, pocket.syncs)
+    }
+
+    @Test
+    fun `history is read with the balance after each sync`() {
+        val item = HistoryItem("ab", netSats = 5_000, feeSats = null, feeRateSatPerVb = null, confirmations = 0, timestampSec = 1)
+        val gate = CompletableDeferred<Unit>().also { pocket.syncGate = it }
+        val vm = vm()
+        assertTrue(
+            vm.state.value.history
+                .isEmpty(),
+        )
+
+        pocket.historyItems = listOf(item)
+        gate.complete(Unit)
+
+        assertEquals(listOf(item), vm.state.value.history)
     }
 
     @Test

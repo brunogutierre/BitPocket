@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -15,6 +16,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -24,9 +26,11 @@ import io.github.brunogutierre.bitpocket.core.format.BitcoinFormat
 import io.github.brunogutierre.bitpocket.core.wallet.Balance
 import io.github.brunogutierre.bitpocket.home.HomeViewModel
 import io.github.brunogutierre.bitpocket.ui.components.BitPocketTopBar
+import io.github.brunogutierre.bitpocket.ui.components.EmptyState
 import io.github.brunogutierre.bitpocket.ui.components.PrimaryButton
 import io.github.brunogutierre.bitpocket.ui.components.SecondaryButton
 import io.github.brunogutierre.bitpocket.ui.components.WarningBanner
+import io.github.brunogutierre.bitpocket.ui.history.TransactionRow
 import io.github.brunogutierre.bitpocket.ui.theme.Spacing
 import io.github.brunogutierre.bitpocket.ui.theme.monoTypography
 import io.github.brunogutierre.bitpocket.ui.theme.screenHorizontalPadding
@@ -57,6 +61,17 @@ fun HomeScreen(
                     }
                 }
                 item { PrimaryButton(stringResource(R.string.home_receive), onClick = onReceive) }
+                item { Text(stringResource(R.string.home_activity), style = MaterialTheme.typography.titleMedium) }
+                if (state.history.isEmpty()) {
+                    item {
+                        EmptyState(
+                            painterResource(R.drawable.ic_science),
+                            stringResource(R.string.home_empty_title),
+                            stringResource(R.string.home_empty_body),
+                        )
+                    }
+                }
+                items(state.history, key = { it.txid }) { item -> TransactionRow(item) }
                 item {
                     SecondaryButton(stringResource(R.string.home_lock), onClick = {
                         viewModel.lock()

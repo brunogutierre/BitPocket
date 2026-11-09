@@ -64,5 +64,15 @@
     <string name="receive_network_hint">Only send %1$s test coins to this address.</string>
     <string name="receive_new_address">New address</string>
     <string name="receive_unused_limit">10 addresses are still waiting for coins. Use one of them before creating another.</string>
+    <string name="home_activity">Activity</string>
+    <string name="home_empty_title">No transactions yet</string>
+    <string name="home_empty_body">Tap Receive and get Signet coins from a faucet to get started.</string>
+    <string name="history_received">Received</string>
+    <string name="history_sent">Sent</string>
+    <string name="history_pending">Pending</string>
+    <plurals name="history_confirmations">
+        <item quantity="one">%1$d confirmation</item>
+        <item quantity="other">%1$d confirmations</item>
+    </plurals>
     <string name="pin_too_weak">PIN too easy to guess. Choose another one.</string>
 </resources>

@@ -1,6 +1,7 @@
 package io.github.brunogutierre.bitpocket.core.format
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
 
@@ -48,5 +49,12 @@ class BitcoinFormatTest {
         expected: String,
     ) {
         assertEquals(expected.split("|").filter { it.isNotEmpty() }, BitcoinFormat.addressChunks(address))
+    }
+
+    @Test
+    fun `signed sats mark incoming amounts with a plus`() {
+        assertEquals("+1${BitcoinFormat.THIN_SPACE}000 sats", BitcoinFormat.signedSats(1_000))
+        assertEquals("-500 sats", BitcoinFormat.signedSats(-500))
+        assertEquals("0 sats", BitcoinFormat.signedSats(0))
     }
 }

@@ -21,6 +21,9 @@ object BitcoinFormat {
         return "${if (amount < 0) "-" else ""}$grouped sats"
     }
 
+    /** Like [sats], with an explicit `+` for incoming amounts: `"+1 000 sats"`, `"-500 sats"`. */
+    fun signedSats(amount: Long): String = if (amount > 0) "+${sats(amount)}" else sats(amount)
+
     /** `1250000` -> `"0.01250000 BTC"` (always 8 decimals). */
     fun btc(amount: Long): String = "${BigDecimal.valueOf(amount, 8).toPlainString()} BTC"
 
