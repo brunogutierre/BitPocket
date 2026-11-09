@@ -13,7 +13,8 @@ captures/
 .externalNativeBuild/
 .cxx/
 
-# IDE
+# IDE (bin/ is the VS Code Java extension output)
+bin/
 .idea/
 *.iml
 .vscode/
@@ -23,3 +24,6 @@ captures/
 .claude/
 CLAUDE.md
 CLAUDE.local.md
+
+# Local study manual (never published)
+manual/
