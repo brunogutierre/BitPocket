@@ -29,6 +29,7 @@ class VaultViewModelTest {
         vm.reload()
 
         assertEquals(listOf(item), vm.state.value.history)
+        assertEquals(vault.heartbeat, vm.state.value.heartbeat)
         assertEquals(HeirTimelock.DAY, vm.config.timelock)
     }
 }

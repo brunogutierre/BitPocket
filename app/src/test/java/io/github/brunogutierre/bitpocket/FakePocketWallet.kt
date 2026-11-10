@@ -96,6 +96,14 @@ class FakePocketWallet(
         return "vault-txid-${vaultSends.size}"
     }
 
+    var heartbeat =
+        io.github.brunogutierre.bitpocket.core.vault.Heartbeat(
+            io.github.brunogutierre.bitpocket.core.vault.HeartbeatStatus.OK,
+            null,
+        )
+
+    override suspend fun heartbeat() = heartbeat
+
     override fun close() {
         closed = true
     }

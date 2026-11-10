@@ -237,5 +237,11 @@
     <string name="vault_sign_body">Type the 12 recovery words to co-sign this Vault spend. They are used for this transaction only and never stored.</string>
     <string name="vault_sign_continue">Continue</string>
     <string name="vault_sign_wrong_words">These are not this Vault\'s recovery words.</string>
+    <!-- Both numbers are large in practice (blocks, days); a plural adds nothing here. -->
+    <string name="heartbeat_body" tools:ignore="PluralsCandidate">The heir key can spend the oldest Vault coin in %1$d blocks (about %2$d days) unless the Vault is refreshed.</string>
+    <string name="heartbeat_due_title">Refresh the Vault soon</string>
+    <string name="heartbeat_expired_title">The heir can spend now</string>
+    <string name="heartbeat_expired_body">Some Vault coins are older than the heir waiting time. Refresh the Vault to restart it, unless the heir should spend them.</string>
+    <string name="heartbeat_refresh">Refresh the Vault</string>
     <string name="pin_too_weak">PIN too easy to guess. Choose another one.</string>
 </resources>

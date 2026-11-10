@@ -30,6 +30,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.brunogutierre.bitpocket.R
 import io.github.brunogutierre.bitpocket.core.format.BitcoinFormat
+import io.github.brunogutierre.bitpocket.core.vault.HeartbeatStatus
 import io.github.brunogutierre.bitpocket.core.wallet.Balance
 import io.github.brunogutierre.bitpocket.home.HomeViewModel
 import io.github.brunogutierre.bitpocket.ui.components.BitPocketTopBar
@@ -41,6 +42,7 @@ import io.github.brunogutierre.bitpocket.ui.history.TransactionRow
 import io.github.brunogutierre.bitpocket.ui.theme.Spacing
 import io.github.brunogutierre.bitpocket.ui.theme.monoTypography
 import io.github.brunogutierre.bitpocket.ui.theme.screenHorizontalPadding
+import io.github.brunogutierre.bitpocket.ui.vault.HeartbeatNotice
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,6 +91,9 @@ fun HomeScreen(
                     }
                 }
                 item { VaultCard(state.vaultBalance, onVault, onSetUpVault) }
+                state.vaultHeartbeat?.takeIf { it.status != HeartbeatStatus.OK }?.let { heartbeat ->
+                    item { HeartbeatNotice(heartbeat, onRefresh = onVault) }
+                }
                 item { Text(stringResource(R.string.home_activity), style = MaterialTheme.typography.titleMedium) }
                 if (state.history.isEmpty()) {
                     item {

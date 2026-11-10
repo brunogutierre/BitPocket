@@ -136,10 +136,12 @@ class SendViewModel(
     private val prefill: (suspend () -> String?)? = null,
     /** Set when spending from the Vault: its RECOVERY public key, to check the typed words. */
     private val vaultRecoveryKey: String? = null,
+    /** Start with "send everything" on (the Vault refresh sends all coins to itself). */
+    sendAll: Boolean = false,
     private val workDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
     val network: SupportedNetwork = pocket.network
-    private val _state = MutableStateFlow(SendUiState())
+    private val _state = MutableStateFlow(SendUiState(sendMax = sendAll))
     val state: StateFlow<SendUiState> = _state.asStateFlow()
     private val pin = PinBuffer()
     private var recoverySeed: ByteArray? = null

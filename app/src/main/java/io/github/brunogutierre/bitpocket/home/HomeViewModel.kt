@@ -3,10 +3,12 @@ package io.github.brunogutierre.bitpocket.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
+import io.github.brunogutierre.bitpocket.core.vault.Heartbeat
 import io.github.brunogutierre.bitpocket.core.wallet.Balance
 import io.github.brunogutierre.bitpocket.core.wallet.ChainUnavailableException
 import io.github.brunogutierre.bitpocket.core.wallet.HistoryItem
 import io.github.brunogutierre.bitpocket.core.wallet.PocketWallet
+import io.github.brunogutierre.bitpocket.core.wallet.VaultPocket
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,6 +23,7 @@ data class HomeUiState(
     val syncFailed: Boolean = false,
     /** Null while there is no Vault (Home then offers to set it up). */
     val vaultBalance: Balance? = null,
+    val vaultHeartbeat: Heartbeat? = null,
 )
 
 /**
@@ -31,7 +34,7 @@ class HomeViewModel(
     private val pocket: PocketWallet,
     private val lockSession: () -> Unit,
     /** The Vault pocket, read each time: it can be set up while Home is on the back stack. */
-    private val vault: () -> PocketWallet? = { null },
+    private val vault: () -> VaultPocket? = { null },
 ) : ViewModel() {
     val network: SupportedNetwork = pocket.network
     private val _state = MutableStateFlow(HomeUiState())
@@ -69,7 +72,9 @@ class HomeViewModel(
     private suspend fun readWallet() {
         val balance = pocket.balance()
         val history = pocket.history()
-        val vaultBalance = vault()?.balance()
-        _state.update { it.copy(balance = balance, history = history, vaultBalance = vaultBalance) }
+        val vaultPocket = vault()
+        val vaultBalance = vaultPocket?.balance()
+        val heartbeat = vaultPocket?.heartbeat()
+        _state.update { it.copy(balance = balance, history = history, vaultBalance = vaultBalance, vaultHeartbeat = heartbeat) }
     }
 }

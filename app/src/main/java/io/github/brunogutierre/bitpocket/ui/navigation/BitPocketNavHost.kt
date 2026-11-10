@@ -186,13 +186,15 @@ fun BitPocketNavHost(
                             onReceive = { backStack.add(Receive(vault = true)) },
                             onMoveIn = { backStack.add(Send(toVault = true)) },
                             onSend = { backStack.add(Send(fromVault = true)) },
+                            onRefresh = { backStack.add(Send(refreshVault = true)) },
                             onTransaction = { txid -> backStack.add(TransactionDetails(txid, vault = true)) },
                         )
                     }
                 }
                 entry<Send> { route ->
                     val wallet = container.session.wallet
-                    val pocket = if (route.fromVault) wallet?.vault else wallet?.spending
+                    val fromVault = route.fromVault || route.refreshVault
+                    val pocket = if (fromVault) wallet?.vault else wallet?.spending
                     if (wallet != null && pocket != null) {
                         SendScreen(
                             viewModel {
