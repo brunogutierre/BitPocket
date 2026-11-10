@@ -5,17 +5,22 @@ import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.brunogutierre.bitpocket.R
@@ -63,6 +68,16 @@ fun TransactionDetailsScreen(
                 Details(current.item)
             }
         }
+        val label by viewModel.label.collectAsStateWithLifecycle()
+        OutlinedTextField(
+            value = label,
+            onValueChange = viewModel::onLabelChange,
+            label = { Text(stringResource(R.string.tx_label)) },
+            singleLine = true,
+            keyboardActions = KeyboardActions(onDone = { viewModel.saveLabel() }),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            modifier = Modifier.fillMaxWidth().onFocusChanged { if (!it.isFocused) viewModel.saveLabel() },
+        )
         DetailRow(stringResource(R.string.tx_id)) {
             SelectionContainer { Text(viewModel.txid, style = MaterialTheme.monoTypography.small) }
         }

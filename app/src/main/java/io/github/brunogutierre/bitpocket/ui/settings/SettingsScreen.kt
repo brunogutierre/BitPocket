@@ -2,6 +2,8 @@ package io.github.brunogutierre.bitpocket.ui.settings
 
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -46,6 +48,8 @@ import io.github.brunogutierre.bitpocket.ui.components.SecureScreen
 import io.github.brunogutierre.bitpocket.ui.components.SeedWordGrid
 import io.github.brunogutierre.bitpocket.ui.components.WarningBanner
 import io.github.brunogutierre.bitpocket.ui.theme.Spacing
+import io.github.brunogutierre.bitpocket.ui.vault.VAULT_BACKUP_FILE_NAME
+import io.github.brunogutierre.bitpocket.ui.vault.writeDocument
 
 @Composable
 fun SettingsScreen(
@@ -53,17 +57,45 @@ fun SettingsScreen(
     seedCipher: SeedCipher,
     onBack: () -> Unit,
     onChangePin: () -> Unit,
+    onGuardrails: () -> Unit,
+    onDuress: () -> Unit,
+    onServer: () -> Unit,
+    onCoins: () -> Unit,
+    onSetUpVault: () -> Unit,
+    onImportVault: () -> Unit,
+    onClaimInheritance: () -> Unit,
+    vaultBackup: () -> ByteArray?,
     onLock: () -> Unit,
     onWiped: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { viewModel.refresh() }
     LaunchedEffect(state.wiped) { if (state.wiped) onWiped() }
     val phrase = state.phrase
     val action = state.action
     when {
-        phrase != null -> RecoveryPhrase(phrase, viewModel::closePhrase)
-        action != null -> PinStep(viewModel, state, action, seedCipher)
-        else -> SettingsList(viewModel, state, onBack, onChangePin, onLock)
+        phrase != null -> {
+            RecoveryPhrase(phrase, viewModel::closePhrase)
+        }
+
+        action != null -> {
+            PinStep(viewModel, state, action, seedCipher)
+        }
+
+        else -> {
+            SettingsList(
+                viewModel,
+                state,
+                onBack,
+                onChangePin,
+                onGuardrails,
+                onDuress,
+                onServer,
+                onCoins,
+                VaultActions(onSetUpVault, onImportVault, vaultBackup, onClaimInheritance),
+                onLock,
+            )
+        }
     }
 }
 
@@ -73,9 +105,29 @@ private fun SettingsList(
     state: SettingsUiState,
     onBack: () -> Unit,
     onChangePin: () -> Unit,
+    onGuardrails: () -> Unit,
+    onDuress: () -> Unit,
+    onServer: () -> Unit,
+    onCoins: () -> Unit,
+    vault: VaultActions,
     onLock: () -> Unit,
 ) {
     val context = LocalContext.current
+    val exportLabels =
+        rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/jsonl")) { uri ->
+            if (uri != null) writeDocument(context, uri, viewModel.exportLabels().toByteArray(Charsets.UTF_8))
+        }
+    val importLabels =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            uri
+                ?.let { runCatching { context.contentResolver.openInputStream(it)?.use { input -> input.readBytes() } }.getOrNull() }
+                ?.let { viewModel.importLabels(it.toString(Charsets.UTF_8)) }
+        }
+    val exportBackup =
+        rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+            val bytes = vault.backup()
+            if (uri != null && bytes != null) writeDocument(context, uri, bytes)
+        }
     val version =
         remember {
             context.packageManager
@@ -103,6 +155,8 @@ private fun SettingsList(
                     )
                 },
             )
+            Entry(stringResource(R.string.guardrails_title), stringResource(R.string.settings_guardrails_body), onGuardrails)
+            Entry(stringResource(R.string.duress_title), stringResource(R.string.settings_duress_body), onDuress)
             Entry(stringResource(R.string.settings_auto_lock), stringResource(state.autoLock.label()), viewModel::openAutoLock)
             Entry(
                 stringResource(R.string.settings_show_phrase),
@@ -111,6 +165,37 @@ private fun SettingsList(
             )
             Entry(stringResource(R.string.settings_change_pin), null, onChangePin)
             Entry(stringResource(R.string.home_lock), stringResource(R.string.settings_lock_body), onLock)
+            HorizontalDivider()
+            SectionTitle(stringResource(R.string.settings_vault))
+            if (state.hasVault) {
+                Entry(stringResource(R.string.settings_vault_export), stringResource(R.string.settings_vault_export_body), {
+                    exportBackup.launch(VAULT_BACKUP_FILE_NAME)
+                })
+            } else {
+                Entry(stringResource(R.string.settings_vault_set_up), stringResource(R.string.settings_vault_set_up_body), vault.setUp)
+                Entry(stringResource(R.string.settings_vault_import), stringResource(R.string.settings_vault_import_body), vault.import)
+            }
+            Entry(stringResource(R.string.heir_title), stringResource(R.string.settings_heir_body), vault.claimInheritance)
+            HorizontalDivider()
+            SectionTitle(stringResource(R.string.settings_privacy))
+            Entry(stringResource(R.string.server_title), stringResource(R.string.settings_server_body), onServer)
+            Entry(stringResource(R.string.coins_title), stringResource(R.string.settings_coins_body), onCoins)
+            Entry(
+                stringResource(R.string.labels_export),
+                stringResource(R.string.labels_export_body),
+                { exportLabels.launch(LABELS_FILE_NAME) },
+            )
+            Entry(
+                stringResource(R.string.labels_import),
+                stringResource(R.string.labels_import_body),
+                { importLabels.launch(arrayOf("*/*")) },
+            )
+            state.labelImport?.let { result ->
+                Text(
+                    stringResource(R.string.labels_imported, result.added, result.skipped, result.frozen.size),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
             HorizontalDivider()
             SectionTitle(stringResource(R.string.settings_about))
             ListItem(
@@ -259,3 +344,14 @@ private fun Entry(
         modifier = Modifier.clickable(onClick = onClick),
     )
 }
+
+/** Vault entries of the Settings list. */
+class VaultActions(
+    val setUp: () -> Unit,
+    val import: () -> Unit,
+    val backup: () -> ByteArray?,
+    val claimInheritance: () -> Unit,
+)
+
+/** BIP329 files are JSON Lines. */
+private const val LABELS_FILE_NAME = "bitpocket-labels.jsonl"

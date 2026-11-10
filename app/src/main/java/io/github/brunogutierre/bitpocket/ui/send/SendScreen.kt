@@ -1,11 +1,16 @@
 package io.github.brunogutierre.bitpocket.ui.send
 
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -19,7 +24,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -29,6 +37,9 @@ import io.github.brunogutierre.bitpocket.biometric.BiometricSeedOpener
 import io.github.brunogutierre.bitpocket.core.format.BitcoinFormat
 import io.github.brunogutierre.bitpocket.core.send.AmountError
 import io.github.brunogutierre.bitpocket.core.send.AmountParser
+import io.github.brunogutierre.bitpocket.core.send.BlockReason
+import io.github.brunogutierre.bitpocket.core.send.ConfirmReason
+import io.github.brunogutierre.bitpocket.core.send.GuardrailVerdict
 import io.github.brunogutierre.bitpocket.core.send.RecipientError
 import io.github.brunogutierre.bitpocket.core.send.SpendError
 import io.github.brunogutierre.bitpocket.core.send.SpendPlan
@@ -37,11 +48,13 @@ import io.github.brunogutierre.bitpocket.send.SendStage
 import io.github.brunogutierre.bitpocket.send.SendUiState
 import io.github.brunogutierre.bitpocket.send.SendViewModel
 import io.github.brunogutierre.bitpocket.send.rateFor
+import io.github.brunogutierre.bitpocket.ui.components.AddressFingerprintView
 import io.github.brunogutierre.bitpocket.ui.components.BannerSeverity
 import io.github.brunogutierre.bitpocket.ui.components.PageScaffold
 import io.github.brunogutierre.bitpocket.ui.components.PrimaryButton
 import io.github.brunogutierre.bitpocket.ui.components.SecondaryButton
 import io.github.brunogutierre.bitpocket.ui.components.WarningBanner
+import io.github.brunogutierre.bitpocket.ui.settings.coinStatus
 import io.github.brunogutierre.bitpocket.ui.theme.Spacing
 import io.github.brunogutierre.bitpocket.ui.theme.monoTypography
 
@@ -55,6 +68,9 @@ fun SendScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     when (state.stage) {
         SendStage.EDIT -> EditStage(viewModel, state, onBack)
+        SendStage.SCAN -> ScanStage(onScanned = viewModel::onScanned, onCancel = viewModel::cancelScan)
+        SendStage.RECOVERY -> RecoveryStage(viewModel, state)
+        SendStage.COINS -> CoinsStage(viewModel, state)
         SendStage.REVIEW -> state.plan?.let { ReviewStage(viewModel, state, it) }
         SendStage.AUTH_BIOMETRIC -> BiometricStage(viewModel, biometricOpener)
         SendStage.AUTH_PIN -> PinStage(viewModel, state)
@@ -69,8 +85,9 @@ private fun EditStage(
     state: SendUiState,
     onBack: () -> Unit,
 ) {
+    val context = LocalContext.current
     PageScaffold(
-        title = stringResource(R.string.send_title),
+        title = stringResource(if (viewModel.isVault) R.string.vault_send_title else R.string.send_title),
         onBack = onBack,
         network = viewModel.network,
         bottomActions = {
@@ -86,12 +103,17 @@ private fun EditStage(
             value = state.addressText,
             onValueChange = viewModel::onAddressChange,
             label = { Text(stringResource(R.string.send_address_label)) },
+            trailingIcon = {
+                // The clipboard is read only when the user asks for it.
+                TextButton(onClick = { pasteText(context)?.let(viewModel::onAddressChange) }) { Text(stringResource(R.string.send_paste)) }
+            },
             isError = state.addressError != null,
             supportingText = state.addressError?.let { { Text(stringResource(it.message())) } },
             textStyle = MaterialTheme.monoTypography.small,
             keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, capitalization = KeyboardCapitalization.None),
             modifier = Modifier.fillMaxWidth(),
         )
+        SecondaryButton(stringResource(R.string.send_scan), onClick = viewModel::startScan)
         OutlinedTextField(
             value = if (state.sendMax) "" else state.amountText,
             onValueChange = viewModel::onAmountChange,
@@ -111,6 +133,15 @@ private fun EditStage(
             Switch(checked = state.sendMax, onCheckedChange = viewModel::onSendMaxChange)
         }
         FeeSelector(viewModel, state)
+        TextButton(onClick = viewModel::chooseCoins) {
+            Text(
+                if (state.selectedCoins.isEmpty()) {
+                    stringResource(R.string.send_coins_auto)
+                } else {
+                    pluralStringResource(R.plurals.send_coins_chosen, state.selectedCoins.size, state.selectedCoins.size)
+                },
+            )
+        }
         state.spendError?.let {
             WarningBanner(
                 stringResource(R.string.send_failed_title),
@@ -171,12 +202,18 @@ private fun ReviewStage(
         onBack = viewModel::edit,
         network = viewModel.network,
         bottomActions = {
-            PrimaryButton(stringResource(R.string.send_confirm), onClick = viewModel::confirm)
+            PrimaryButton(stringResource(R.string.send_confirm), onClick = viewModel::confirm, enabled = state.canConfirm)
             SecondaryButton(stringResource(R.string.send_edit), onClick = viewModel::edit)
         },
     ) {
         ReviewRow(stringResource(R.string.send_review_to)) {
             Text(BitcoinFormat.addressChunks(plan.recipient).joinToString(" "), style = MaterialTheme.monoTypography.address)
+            AddressFingerprintView(plan.recipient)
+            Text(
+                stringResource(R.string.send_review_fingerprint_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         ReviewRow(stringResource(R.string.send_review_amount)) { Amount(plan.amountSats) }
         ReviewRow(stringResource(R.string.send_review_fee, plan.feeRateSatPerVb)) { Amount(plan.feeSats) }
@@ -188,6 +225,7 @@ private fun ReviewStage(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        GuardrailNotice(viewModel, state)
         when {
             state.broadcastFailed -> {
                 WarningBanner(
@@ -203,6 +241,58 @@ private fun ReviewStage(
 
             else -> {
                 WarningBanner(stringResource(R.string.send_review_check_title), stringResource(R.string.send_review_check_body))
+            }
+        }
+    }
+}
+
+/** A hard limit (red banner) or the confirmations to tick before sending. */
+@Composable
+private fun GuardrailNotice(
+    viewModel: SendViewModel,
+    state: SendUiState,
+) {
+    when (val verdict = state.guardrail) {
+        GuardrailVerdict.Allowed -> {
+            Unit
+        }
+
+        is GuardrailVerdict.Blocked -> {
+            val allowed = BitcoinFormat.sats(verdict.allowedSats)
+            val body =
+                when (verdict.reason) {
+                    BlockReason.PER_TX_LIMIT -> stringResource(R.string.guardrail_blocked_per_tx, allowed)
+                    BlockReason.WINDOW_LIMIT -> stringResource(R.string.guardrail_blocked_window, allowed)
+                }
+            WarningBanner(stringResource(R.string.guardrail_blocked_title), body, severity = BannerSeverity.ERROR)
+        }
+
+        is GuardrailVerdict.NeedsConfirmation -> {
+            state.lookalikeOf?.let { known ->
+                WarningBanner(
+                    stringResource(R.string.lookalike_title),
+                    stringResource(R.string.lookalike_body, BitcoinFormat.addressChunks(known).joinToString(" ")),
+                    severity = BannerSeverity.ERROR,
+                )
+            }
+            verdict.reasons.sorted().forEach { reason ->
+                val text =
+                    when (reason) {
+                        ConfirmReason.NEW_RECIPIENT -> R.string.guardrail_confirm_new_recipient
+                        ConfirmReason.LARGE_SHARE -> R.string.guardrail_confirm_large_share
+                        ConfirmReason.LOOKALIKE -> R.string.guardrail_confirm_lookalike
+                    }
+                val checked = reason in state.acknowledged
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .toggleable(value = checked, role = Role.Checkbox, onValueChange = { viewModel.acknowledge(reason, it) }),
+                ) {
+                    Checkbox(checked = checked, onCheckedChange = null)
+                    Text(stringResource(text), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = Spacing.sm))
+                }
             }
         }
     }
@@ -269,9 +359,50 @@ private fun spendErrorText(error: SpendError): String =
             stringResource(R.string.send_error_rejected)
         }
 
-        SpendError.UNSAFE_INPUT, SpendError.SIGNING_FAILED, SpendError.PLAN_MISMATCH, SpendError.OTHER -> {
+        SpendError.UNSAFE_INPUT, SpendError.SIGNING_FAILED, SpendError.PLAN_MISMATCH, SpendError.WRONG_BRANCH, SpendError.OTHER -> {
             stringResource(
                 R.string.send_error_other,
             )
         }
     }
+
+private fun pasteText(context: Context): String? =
+    context
+        .getSystemService(ClipboardManager::class.java)
+        .primaryClip
+        ?.takeIf { it.itemCount > 0 }
+        ?.getItemAt(0)
+        ?.coerceToText(context)
+        ?.toString()
+
+@Composable
+private fun CoinsStage(
+    viewModel: SendViewModel,
+    state: SendUiState,
+) {
+    BackHandler(onBack = viewModel::doneChoosingCoins)
+    PageScaffold(
+        title = stringResource(R.string.coins_title),
+        onBack = viewModel::doneChoosingCoins,
+        network = viewModel.network,
+        bottomActions = { PrimaryButton(stringResource(R.string.sign_done), onClick = viewModel::doneChoosingCoins) },
+    ) {
+        Text(stringResource(R.string.send_coins_body), style = MaterialTheme.typography.bodyMedium)
+        state.availableCoins.forEach { coin ->
+            val checked = coin.outpoint in state.selectedCoins
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier =
+                    Modifier.fillMaxWidth().toggleable(value = checked, role = Role.Checkbox, onValueChange = {
+                        viewModel.toggleCoin(coin.outpoint)
+                    }),
+            ) {
+                Checkbox(checked = checked, onCheckedChange = null)
+                Column(Modifier.padding(start = Spacing.sm)) {
+                    Text(BitcoinFormat.sats(coin.sats), style = MaterialTheme.monoTypography.amount)
+                    Text(coinStatus(coin), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+    }
+}

@@ -6,10 +6,16 @@ import io.github.brunogutierre.bitpocket.biometric.BiometricFailure
 import io.github.brunogutierre.bitpocket.biometric.BiometricSeedResult
 import io.github.brunogutierre.bitpocket.core.crypto.wipe
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
+import io.github.brunogutierre.bitpocket.core.seed.MnemonicService
+import io.github.brunogutierre.bitpocket.core.seed.RestoreResult
 import io.github.brunogutierre.bitpocket.core.send.AmountError
 import io.github.brunogutierre.bitpocket.core.send.AmountParser
 import io.github.brunogutierre.bitpocket.core.send.AmountResult
+import io.github.brunogutierre.bitpocket.core.send.ConfirmReason
 import io.github.brunogutierre.bitpocket.core.send.FeeOptions
+import io.github.brunogutierre.bitpocket.core.send.GuardrailCheck
+import io.github.brunogutierre.bitpocket.core.send.GuardrailVerdict
+import io.github.brunogutierre.bitpocket.core.send.Lookalike
 import io.github.brunogutierre.bitpocket.core.send.RecipientError
 import io.github.brunogutierre.bitpocket.core.send.RecipientParser
 import io.github.brunogutierre.bitpocket.core.send.RecipientResult
@@ -20,8 +26,14 @@ import io.github.brunogutierre.bitpocket.core.send.SpendPlan
 import io.github.brunogutierre.bitpocket.core.send.SpendRequest
 import io.github.brunogutierre.bitpocket.core.session.SeedOutcome
 import io.github.brunogutierre.bitpocket.core.session.WalletAccess
+import io.github.brunogutierre.bitpocket.core.settings.Guardrails
+import io.github.brunogutierre.bitpocket.core.settings.GuardrailsPolicy
+import io.github.brunogutierre.bitpocket.core.settings.WalletSettings
+import io.github.brunogutierre.bitpocket.core.vault.VaultKeys
 import io.github.brunogutierre.bitpocket.core.wallet.ChainUnavailableException
+import io.github.brunogutierre.bitpocket.core.wallet.Coin
 import io.github.brunogutierre.bitpocket.core.wallet.PocketWallet
+import io.github.brunogutierre.bitpocket.core.wallet.VaultPort
 import io.github.brunogutierre.bitpocket.security.LockoutCountdown
 import io.github.brunogutierre.bitpocket.security.PinBuffer
 import kotlinx.coroutines.CoroutineDispatcher
@@ -37,6 +49,15 @@ enum class FeeSpeed { FAST, NORMAL, SLOW }
 
 enum class SendStage {
     EDIT,
+
+    /** The camera looks for a QR code with an address or bitcoin: link. */
+    SCAN,
+
+    /** Vault spends: the recovery words are typed to co-sign (ADR 0007). */
+    RECOVERY,
+
+    /** Coin control: choose which coins pay. */
+    COINS,
     REVIEW,
 
     /** The screen shows BiometricPrompt and reports back through [SendViewModel.onBiometricResult]. */
@@ -59,6 +80,12 @@ data class SendUiState(
     val spendError: SpendError? = null,
     val planning: Boolean = false,
     val plan: SpendPlan? = null,
+    /** How the guardrails judged [plan]. */
+    val guardrail: GuardrailVerdict = GuardrailVerdict.Allowed,
+    /** Confirmations the user ticked on Review. */
+    val acknowledged: Set<ConfirmReason> = emptySet(),
+    /** The known address the recipient looks like, when it is a possible poisoning address. */
+    val lookalikeOf: String? = null,
     val pinEntered: Int = 0,
     val pinVerifying: Boolean = false,
     val wrongPin: Boolean = false,
@@ -70,8 +97,23 @@ data class SendUiState(
     /** The last send attempt could not reach the backend: nothing was sent. */
     val broadcastFailed: Boolean = false,
     val txid: String? = null,
+    val recoveryText: String = "",
+    /** Coins the user can pick (confirmed, not frozen), and the picked ones; empty = automatic. */
+    val availableCoins: List<Coin> = emptyList(),
+    val selectedCoins: Set<String> = emptySet(),
+    /** The typed recovery words are not a valid phrase, or not this Vault's recovery key. */
+    val recoveryError: Boolean = false,
 ) {
     val pinKeysEnabled: Boolean get() = !pinVerifying && lockoutSeconds == 0L
+
+    /** Not blocked, and every confirmation the guardrails asked for is ticked. */
+    val canConfirm: Boolean
+        get() =
+            when (val verdict = guardrail) {
+                GuardrailVerdict.Allowed -> true
+                is GuardrailVerdict.Blocked -> false
+                is GuardrailVerdict.NeedsConfirmation -> acknowledged.containsAll(verdict.reasons)
+            }
 
     val feeRate: Long? get() = fees?.rateFor(speed)
     val canReview: Boolean get() = fees != null && !planning
@@ -95,16 +137,28 @@ class SendViewModel(
     private val walletAccess: WalletAccess,
     /** The session's biometric-sealed seed, or null when biometric signing is off. */
     val biometricSeed: ByteArray?,
+    /** The session's settings, for the guardrails in force. */
+    private val settings: WalletSettings = WalletSettings(),
+    /** An address to start with, e.g. the Vault's for "Move to Vault". */
+    private val prefill: (suspend () -> String?)? = null,
+    /** Set when spending from the Vault: its RECOVERY public key, to check the typed words. */
+    private val vaultRecoveryKey: String? = null,
+    /** Start with "send everything" on (the Vault refresh sends all coins to itself). */
+    sendAll: Boolean = false,
     private val workDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
     val network: SupportedNetwork = pocket.network
-    private val _state = MutableStateFlow(SendUiState())
+    private val _state = MutableStateFlow(SendUiState(sendMax = sendAll))
     val state: StateFlow<SendUiState> = _state.asStateFlow()
     private val pin = PinBuffer()
+    private var recoverySeed: ByteArray? = null
+    private val vault: VaultPort? get() = if (vaultRecoveryKey != null) pocket as VaultPort else null
+    val isVault: Boolean get() = vaultRecoveryKey != null
     private val countdown = LockoutCountdown(viewModelScope) { seconds -> _state.update { it.copy(lockoutSeconds = seconds) } }
 
     init {
         loadFees()
+        prefill?.let { viewModelScope.launch { it()?.let(::onAddressChange) } }
     }
 
     fun loadFees() {
@@ -132,6 +186,42 @@ class SendViewModel(
         }
     }
 
+    fun startScan() = _state.update { it.copy(stage = SendStage.SCAN) }
+
+    fun chooseCoins() {
+        viewModelScope.launch {
+            val usable = pocket.coins().filter { !it.frozen && it.confirmations > 0 }
+            _state.update { it.copy(stage = SendStage.COINS, availableCoins = usable) }
+        }
+    }
+
+    fun toggleCoin(outpoint: String) =
+        _state.update {
+            it.copy(
+                selectedCoins =
+                    if (outpoint in
+                        it.selectedCoins
+                    ) {
+                        it.selectedCoins - outpoint
+                    } else {
+                        it.selectedCoins + outpoint
+                    },
+                spendError = null,
+            )
+        }
+
+    /** Back to the form with the selection (empty = let the wallet choose). */
+    fun doneChoosingCoins() = _state.update { it.copy(stage = SendStage.EDIT) }
+
+    fun cancelScan() = _state.update { it.copy(stage = SendStage.EDIT) }
+
+    /** A scanned QR fills the recipient (and an empty amount, for a BIP21 link with one). */
+    fun onScanned(text: String) {
+        if (_state.value.stage != SendStage.SCAN) return
+        _state.update { it.copy(stage = SendStage.EDIT) }
+        onAddressChange(text)
+    }
+
     fun onAmountChange(text: String) = _state.update { it.copy(amountText = text, amountError = null, spendError = null) }
 
     fun onSendMaxChange(max: Boolean) = _state.update { it.copy(sendMax = max, amountError = null, spendError = null) }
@@ -155,8 +245,31 @@ class SendViewModel(
         _state.update { it.copy(planning = true, spendError = null) }
         viewModelScope.launch {
             try {
-                val plan = pocket.planSpend(SpendRequest(address, sendAmount, feeRate))
-                _state.update { it.copy(planning = false, plan = plan, stage = SendStage.REVIEW) }
+                val request = SpendRequest(address, sendAmount, feeRate, current.selectedCoins.toList().ifEmpty { null })
+                val plan = vault?.planVaultSpend(request) ?: pocket.planSpend(request)
+                val stats = pocket.spendingStats(Guardrails.WINDOW_BLOCKS)
+                // The Vault already needs the offline recovery key: guardrails apply to Spending only.
+                val guardrails =
+                    if (isVault) {
+                        Guardrails(
+                            confirmNewRecipients = false,
+                            confirmLargeShare = false,
+                        )
+                    } else {
+                        GuardrailsPolicy.effective(settings, stats.tipHeight)
+                    }
+                val verdict = GuardrailCheck.evaluate(guardrails, plan, stats)
+                val lookalike = Lookalike.find(plan.recipient, stats.pastRecipients + stats.ownAddresses)
+                _state.update {
+                    it.copy(
+                        planning = false,
+                        plan = plan,
+                        guardrail = verdict,
+                        lookalikeOf = lookalike,
+                        acknowledged = emptySet(),
+                        stage = SendStage.REVIEW,
+                    )
+                }
             } catch (e: SpendException) {
                 _state.update { it.copy(planning = false, spendError = e.error) }
             }
@@ -166,12 +279,44 @@ class SendViewModel(
     /** From REVIEW back to EDIT, keeping what was typed. */
     fun edit() = _state.update { it.copy(stage = SendStage.EDIT, plan = null, broadcastFailed = false, spendError = null) }
 
+    fun acknowledge(
+        reason: ConfirmReason,
+        checked: Boolean,
+    ) = _state.update { it.copy(acknowledged = if (checked) it.acknowledged + reason else it.acknowledged - reason) }
+
     /** "Confirm and send" on REVIEW. */
     fun confirm() {
-        if (_state.value.plan == null) return
+        if (_state.value.plan == null || !_state.value.canConfirm) return
+        if (isVault && recoverySeed == null) {
+            _state.update { it.copy(stage = SendStage.RECOVERY, broadcastFailed = false, spendError = null, recoveryError = false) }
+            return
+        }
         val stage = if (biometricSeed != null) SendStage.AUTH_BIOMETRIC else SendStage.AUTH_PIN
         _state.update { it.copy(stage = stage, broadcastFailed = false, spendError = null, biometricFailure = null, authFailed = false) }
     }
+
+    fun onRecoveryTextChange(text: String) = _state.update { it.copy(recoveryText = text, recoveryError = false) }
+
+    /** Checks the typed words against the Vault's RECOVERY key, keeps the seed, then asks for the phone's. */
+    fun submitRecovery() {
+        val words =
+            _state.value.recoveryText
+                .trim()
+                .lowercase()
+                .split(Regex("\\s+"))
+        val seed = (MnemonicService().restore(words) as? RestoreResult.Valid)?.entropy
+        if (seed == null || VaultKeys.publicKey(seed, network) != vaultRecoveryKey) {
+            seed?.wipe()
+            _state.update { it.copy(recoveryError = true) }
+            return
+        }
+        recoverySeed = seed
+        // The words leave the state as soon as they are checked.
+        _state.update { it.copy(recoveryText = "") }
+        confirm()
+    }
+
+    fun cancelRecovery() = _state.update { it.copy(stage = SendStage.REVIEW, recoveryText = "", recoveryError = false) }
 
     /** Leaves authentication without signing. */
     fun cancelAuth() {
@@ -238,7 +383,16 @@ class SendViewModel(
         _state.update { it.copy(stage = SendStage.SENDING) }
         viewModelScope.launch {
             try {
-                val txid = pocket.send(plan, entropy)
+                val recovery = recoverySeed
+                val vaultPort = vault
+                val txid =
+                    if (vaultPort != null &&
+                        recovery != null
+                    ) {
+                        vaultPort.sendFromVault(plan, entropy, recovery)
+                    } else {
+                        pocket.send(plan, entropy)
+                    }
                 _state.update { it.copy(stage = SendStage.DONE, txid = txid) }
             } catch (e: SpendException) {
                 _state.update { it.copy(stage = SendStage.REVIEW, spendError = e.error) }
@@ -246,9 +400,18 @@ class SendViewModel(
                 _state.update { it.copy(stage = SendStage.REVIEW, broadcastFailed = true) }
             } finally {
                 entropy.wipe()
+                wipeRecovery()
             }
         }
     }
 
-    override fun onCleared() = pin.clear()
+    private fun wipeRecovery() {
+        recoverySeed?.wipe()
+        recoverySeed = null
+    }
+
+    override fun onCleared() {
+        pin.clear()
+        wipeRecovery()
+    }
 }

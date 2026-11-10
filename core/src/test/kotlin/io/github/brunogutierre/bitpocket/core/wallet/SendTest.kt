@@ -5,6 +5,7 @@ import io.github.brunogutierre.bitpocket.core.send.SendAmount
 import io.github.brunogutierre.bitpocket.core.send.SpendError
 import io.github.brunogutierre.bitpocket.core.send.SpendException
 import io.github.brunogutierre.bitpocket.core.send.SpendRequest
+import io.github.brunogutierre.bitpocket.core.send.SpendingStats
 import io.github.brunogutierre.bitpocket.core.testing.ChainFixtures
 import io.github.brunogutierre.bitpocket.core.testing.Funding
 import kotlinx.coroutines.Dispatchers
@@ -50,6 +51,22 @@ class SendTest {
         }
 
     @Test
+    fun `spending stats count recent sends and remember their recipients`() =
+        runTest {
+            val before = wallet.spendingStats(144)
+            assertEquals(SpendingStats(105, 0, emptySet(), 50_000, before.ownAddresses), before)
+            assertTrue(FIRST_ADDRESS in before.ownAddresses)
+
+            val plan = plan()
+            wallet.send(plan, SEED.copyOf())
+
+            val stats = wallet.spendingStats(144)
+            assertEquals(plan.totalSats, stats.spentInWindowSats)
+            assertEquals(setOf(RECIPIENT), stats.pastRecipients)
+            assertEquals(50_000 - plan.totalSats, stats.balanceSats)
+        }
+
+    @Test
     fun `another seed cannot sign and nothing is broadcast`() =
         runTest {
             val error = assertThrows<SpendException> { wallet.send(plan(), ByteArray(16) { 9 }) }
@@ -86,5 +103,8 @@ class SendTest {
     private companion object {
         val SEED = ByteArray(16)
         const val RECIPIENT = "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx"
+
+        // m/86'/1'/0'/0/0 of the all-zero seed: funded by the fixture, so it is revealed.
+        const val FIRST_ADDRESS = "tb1p8wpt9v4frpf3tkn0srd97pksgsxc5hs52lafxwru9kgeephvs7rqlqt9zj"
     }
 }

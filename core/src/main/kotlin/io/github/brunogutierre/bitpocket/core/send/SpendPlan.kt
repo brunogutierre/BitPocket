@@ -13,6 +13,8 @@ data class SpendRequest(
     val address: String,
     val amount: SendAmount,
     val feeRateSatPerVb: Long,
+    /** Coin control: spend only these coins (`txid:vout`); null lets BDK choose. */
+    val coins: List<String>? = null,
 )
 
 /**
@@ -50,6 +52,9 @@ enum class SpendError {
 
     /** The network refused the transaction (e.g. its coins were already spent). */
     REJECTED,
+
+    /** A Vault transaction did not use the expected policy branch (ADR 0002 guard). */
+    WRONG_BRANCH,
     OTHER,
 }
 

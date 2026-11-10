@@ -30,9 +30,7 @@ class SettingsViewModelTest {
     private var wiped = false
 
     private fun vm(biometricAvailable: Boolean = true) =
-        SettingsViewModel(access, session, biometricAvailable, {
-            wiped = true
-        }, main.dispatcher)
+        SettingsViewModel(access, session, biometricAvailable, wipeAll = { wiped = true }, workDispatcher = main.dispatcher)
 
     private fun SettingsViewModel.typePin(pin: String = "123456") = pin.forEach(::pinDigit)
 
@@ -155,6 +153,44 @@ class SettingsViewModelTest {
         assertFalse(vm.state.value.pinKeysEnabled)
         vm.cancelPin()
         assertNull(vm.state.value.action)
+    }
+
+    @Test
+    fun `the real and the decoy session look exactly the same to the UI`() {
+        val settings =
+            io.github.brunogutierre.bitpocket.core.settings
+                .WalletSettings()
+
+        fun stateFor(slot: SlotId): SettingsUiState {
+            val session = Session().apply { open(UnlockedWallet(slot, SupportedNetwork.SIGNET, null, FakePocketWallet(), settings)) }
+            return SettingsViewModel(access, session, true, {}, workDispatcher = main.dispatcher).state.value
+        }
+
+        assertEquals(stateFor(SlotId.A), stateFor(SlotId.B))
+    }
+
+    @Test
+    fun `importing labels freezes the outputs marked unspendable`(
+        @org.junit.jupiter.api.io.TempDir dir: java.io.File,
+    ) {
+        val store =
+            io.github.brunogutierre.bitpocket.core.labels
+                .LabelStore(java.io.File(dir, "labels.jsonl"))
+        val coin =
+            io.github.brunogutierre.bitpocket.core.wallet
+                .Coin("a".repeat(64) + ":1", 500, 3, frozen = false)
+        (session.wallet!!.spending as FakePocketWallet).coinList = listOf(coin)
+        val vm = SettingsViewModel(access, session, true, {}, { store }, main.dispatcher)
+
+        vm.importLabels("""{"type":"output","ref":"${coin.outpoint}","label":"Dust","spendable":false}""")
+
+        assertEquals(
+            io.github.brunogutierre.bitpocket.core.labels
+                .LabelImport(1, 0, listOf(coin.outpoint)),
+            vm.state.value.labelImport,
+        )
+        assertTrue((session.wallet!!.spending as FakePocketWallet).coinList.single().frozen)
+        assertTrue(vm.exportLabels().contains("Dust"))
     }
 
     private class RecordingVault : BiometricSeedVault {

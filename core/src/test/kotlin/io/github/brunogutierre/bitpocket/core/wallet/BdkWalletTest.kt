@@ -3,6 +3,8 @@ package io.github.brunogutierre.bitpocket.core.wallet
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
 import io.github.brunogutierre.bitpocket.core.seed.SlotPayload
 import io.github.brunogutierre.bitpocket.core.send.FeeOptions
+import io.github.brunogutierre.bitpocket.core.send.SendAmount
+import io.github.brunogutierre.bitpocket.core.send.SpendRequest
 import io.github.brunogutierre.bitpocket.core.testing.ChainFixtures
 import io.github.brunogutierre.bitpocket.core.testing.Funding
 import kotlinx.coroutines.Dispatchers
@@ -142,7 +144,7 @@ class BdkWalletTest {
     @Test
     fun `the opener derives the wallet directory from public data`() =
         runTest {
-            val opener = BdkWalletOpener(dir) { chain }
+            val opener = BdkWalletOpener(dir) { _, _ -> chain }
             val payload = SlotPayload(ByteArray(16), biometricSeed = null, network = network)
 
             opener.open(payload).use { wallet ->
@@ -150,6 +152,32 @@ class BdkWalletTest {
             }
             val id = WalletFiles.id(network, descriptors)
             assertTrue(File(dir, "wallets/$id/spending.sqlite").isFile)
+        }
+
+    @Test
+    fun `the vault pocket is a watch-only wallet of its own that cannot plan single-key spends`() =
+        runTest {
+            val config =
+                io.github.brunogutierre.bitpocket.core.vault.VaultConfig(
+                    io.github.brunogutierre.bitpocket.core.spike.VaultFixtures.PHONE.xpub,
+                    io.github.brunogutierre.bitpocket.core.spike.VaultFixtures.RECOVERY.xpub,
+                    io.github.brunogutierre.bitpocket.core.spike.VaultFixtures.HEIR.xpub,
+                    io.github.brunogutierre.bitpocket.core.vault.HeirTimelock.YEAR,
+                )
+            val opener = BdkWalletOpener(dir) { _, _ -> chain }
+            val payload = SlotPayload(ByteArray(16), biometricSeed = null, network = network)
+
+            opener.openVault(payload, config).use { vault ->
+                val first = vault.nextReceiveAddress().address
+                assertEquals(
+                    io.github.brunogutierre.bitpocket.core.spike.VaultFixtures
+                        .firstVaultAddress()
+                        .toString(),
+                    first,
+                )
+                assertThrows<IllegalStateException> { vault.planSpend(SpendRequest(first, SendAmount.Max, 1)) }
+            }
+            assertTrue(File(opener.dirOf(payload), BdkWallet.VAULT_DB).isFile)
         }
 
     @Test
@@ -207,6 +235,8 @@ class FakeChainClient : ChainClient {
     }
 
     override fun feeEstimates(): Map<Int, Double> = estimates ?: throw java.io.IOException("offline")
+
+    override fun blockHash(height: Int): String = throw java.io.IOException("offline")
 
     override fun close() {
         closed = true

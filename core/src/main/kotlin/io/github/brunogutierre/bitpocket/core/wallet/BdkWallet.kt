@@ -8,6 +8,12 @@ import io.github.brunogutierre.bitpocket.core.send.SpendError
 import io.github.brunogutierre.bitpocket.core.send.SpendException
 import io.github.brunogutierre.bitpocket.core.send.SpendPlan
 import io.github.brunogutierre.bitpocket.core.send.SpendRequest
+import io.github.brunogutierre.bitpocket.core.send.SpendingStats
+import io.github.brunogutierre.bitpocket.core.vault.Heartbeat
+import io.github.brunogutierre.bitpocket.core.vault.VaultConfig
+import io.github.brunogutierre.bitpocket.core.vault.VaultGuard
+import io.github.brunogutierre.bitpocket.core.vault.VaultKeys
+import io.github.brunogutierre.bitpocket.core.vault.VaultRole
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -25,10 +31,12 @@ import org.bitcoindevkit.ExtractTxException
 import org.bitcoindevkit.FeeRate
 import org.bitcoindevkit.KeychainKind
 import org.bitcoindevkit.LoadWithPersistException
+import org.bitcoindevkit.OutPoint
 import org.bitcoindevkit.PersistenceException
 import org.bitcoindevkit.Persister
 import org.bitcoindevkit.Psbt
 import org.bitcoindevkit.Script
+import org.bitcoindevkit.SignersContainer
 import org.bitcoindevkit.Transaction
 import org.bitcoindevkit.TxBuilder
 import org.bitcoindevkit.Txid
@@ -52,7 +60,9 @@ class BdkWallet internal constructor(
     override val network: SupportedNetwork,
     private val chain: ChainClient,
     private val dispatcher: CoroutineDispatcher = serialIoDispatcher(),
-) : PocketWallet {
+    /** Set for the Vault pocket: its spends need a policy path and two signers (ADR 0002). */
+    private val vault: VaultConfig? = null,
+) : VaultPocket {
     override suspend fun balance(): Balance =
         onWallet {
             val balance = wallet.balance()
@@ -88,6 +98,41 @@ class BdkWallet internal constructor(
             val id = runCatching { Txid.fromString(txid) }.getOrNull() ?: return@onWallet null
             id.use { historyItem(it, wallet.latestCheckpoint().height) }
         }
+
+    override suspend fun spendingStats(windowBlocks: Int): SpendingStats =
+        onWallet {
+            val tip = wallet.latestCheckpoint().height.toInt()
+            var spent = 0L
+            val recipients = mutableSetOf<String>()
+            wallet.transactions().forEach { canonical ->
+                val details = canonical.transaction.computeTxid().use { wallet.txDetails(it) } ?: return@forEach
+                if (details.balanceDelta >= 0) return@forEach
+                val position = details.chainPosition
+                val recent =
+                    position !is ChainPosition.Confirmed || tip -
+                        position.confirmationBlockTime.blockId.height
+                            .toInt() < windowBlocks
+                if (recent) spent -= details.balanceDelta
+                canonical.transaction.output().filterNot { wallet.isMine(it.scriptPubkey) }.forEach { output ->
+                    runCatching { Address.fromScript(output.scriptPubkey, network.toBdkNetwork()).use { it.toString() } }
+                        .getOrNull()
+                        ?.let(recipients::add)
+                }
+            }
+            val balance = wallet.balance()
+            SpendingStats(
+                tipHeight = tip,
+                spentInWindowSats = spent,
+                pastRecipients = recipients,
+                balanceSats = (balance.confirmed.toSat() + balance.trustedPending.toSat() + balance.untrustedPending.toSat()).toLong(),
+                ownAddresses = revealedReceiveAddresses(),
+            )
+        }
+
+    private fun revealedReceiveAddresses(): Set<String> {
+        val last = wallet.derivationIndex(KeychainKind.EXTERNAL) ?: return emptySet()
+        return (0u..last).map { wallet.peekAddress(KeychainKind.EXTERNAL, it).address.toString() }.toSet()
+    }
 
     private fun historyItem(
         txid: Txid,
@@ -147,48 +192,248 @@ class BdkWallet internal constructor(
 
     override suspend fun planSpend(request: SpendRequest): SpendPlan =
         onWallet {
-            val recipient =
-                try {
-                    Address(request.address, network.toBdkNetwork())
-                } catch (e: AddressParseException) {
-                    throw SpendException(SpendError.INVALID_ADDRESS, e)
-                }
-            recipient.use { address ->
-                address.scriptPubkey().use { script ->
-                    val psbt = buildPsbt(script, request)
-                    psbt.use {
-                        SpendGuard.check(it, wallet)
-                        wallet.persist(persister) // building reveals a change address
-                        planOf(it, request, address.toString(), script.toBytes())
-                    }
+            check(vault == null) { "Vault spends need the 2-of-2 path and the recovery key" }
+            plan(request) { it }
+        }
+
+    /** A Vault spend on the 2-of-2 branch, chosen explicitly for BOTH keychains (ADR 0002). */
+    override suspend fun planVaultSpend(request: SpendRequest): SpendPlan =
+        onWallet {
+            checkNotNull(vault) { "Not a Vault pocket" }
+            plan(request) { builder ->
+                builder
+                    .policyPath(branchPath(KeychainKind.EXTERNAL, MULTISIG_BRANCH), KeychainKind.EXTERNAL)
+                    .policyPath(branchPath(KeychainKind.INTERNAL, MULTISIG_BRANCH), KeychainKind.INTERNAL)
+            }
+        }
+
+    private fun branchPath(
+        keychain: KeychainKind,
+        branch: ULong,
+    ): Map<String, List<ULong>> = mapOf(requireNotNull(wallet.policies(keychain)).use { it.id() } to listOf(branch))
+
+    private fun plan(
+        request: SpendRequest,
+        sweep: List<OutPoint>? = null,
+        path: (TxBuilder) -> TxBuilder,
+    ): SpendPlan {
+        val recipient =
+            try {
+                Address(request.address, network.toBdkNetwork())
+            } catch (e: AddressParseException) {
+                throw SpendException(SpendError.INVALID_ADDRESS, e)
+            }
+        return recipient.use { address ->
+            address.scriptPubkey().use { script ->
+                buildPsbt(script, request, sweep ?: request.coins?.map(::outPointOf), path).use {
+                    SpendGuard.check(it, wallet)
+                    wallet.persist(persister) // building reveals a change address
+                    planOf(it, request, address.toString(), script.toBytes())
                 }
             }
         }
+    }
 
     override suspend fun send(
         plan: SpendPlan,
         seedEntropy: ByteArray,
     ): String =
         onWallet {
+            check(vault == null) { "Vault spends need the recovery key" }
             Psbt(plan.psbtBase64).use { psbt ->
                 SpendGuard.check(psbt, wallet)
                 if (!SeedSigner.sign(wallet, psbt, seedEntropy, network)) throw SpendException(SpendError.SIGNING_FAILED)
-                val tx =
-                    try {
-                        psbt.extractTx() // also refuses an absurd fee rate
-                    } catch (e: ExtractTxException) {
-                        throw SpendException(SpendError.OTHER, e)
-                    }
-                tx.use {
-                    verifyAgainstPlan(it, psbt, plan)
-                    broadcast(it)
-                    // Record it now, so balance and history show it before the next sync.
-                    wallet.applyUnconfirmedTxs(listOf(UnconfirmedTx(it, System.currentTimeMillis().toULong() / 1000u)))
-                    wallet.persist(persister)
-                    it.computeTxid().use { txid -> txid.toString() }
-                }
+                broadcastSigned(psbt, plan) {}
             }
         }
+
+    /**
+     * Signs a 2-of-2 Vault plan with PHONE (wallet seed) and RECOVERY (typed words), checks that it
+     * really is the 2-of-2 branch with two signatures per input, then broadcasts it.
+     */
+    override suspend fun sendFromVault(
+        plan: SpendPlan,
+        phoneSeed: ByteArray,
+        recoverySeed: ByteArray,
+    ): String =
+        onWallet {
+            val config = checkNotNull(vault) { "Not a Vault pocket" }
+            Psbt(plan.psbtBase64).use { psbt ->
+                SpendGuard.check(psbt, wallet)
+                val secrets =
+                    mapOf(
+                        VaultRole.PHONE to VaultKeys.secretKey(phoneSeed, network),
+                        VaultRole.RECOVERY to VaultKeys.secretKey(recoverySeed, network),
+                    )
+                val signers =
+                    listOf("0", "1").map { branch ->
+                        Descriptor(
+                            config.descriptor(branch, secrets),
+                            network.toBdkNetworkKind(),
+                        ).use { SignersContainer.fromDescriptor(it) }
+                    }
+                val finalized =
+                    try {
+                        wallet.signWithSigners(psbt, signers)
+                    } finally {
+                        signers.forEach { it.close() }
+                    }
+                if (!finalized) throw SpendException(SpendError.SIGNING_FAILED)
+                broadcastSigned(psbt, plan) { tx -> VaultGuard.checkTwoOfTwo(tx, config.timelock.blocks) }
+            }
+        }
+
+    override suspend fun heartbeat(): Heartbeat =
+        onWallet {
+            val config = checkNotNull(vault) { "Not a Vault pocket" }
+            val heights =
+                wallet.listUnspent().map { utxo ->
+                    (utxo.chainPosition as? ChainPosition.Confirmed)
+                        ?.confirmationBlockTime
+                        ?.blockId
+                        ?.height
+                        ?.toInt()
+                }
+            Heartbeat.of(wallet.latestCheckpoint().height.toInt(), heights, config.timelock.blocks)
+        }
+
+    override suspend fun coins(): List<Coin> =
+        onWallet {
+            val tip = wallet.latestCheckpoint().height.toInt()
+            wallet
+                .listUnspent()
+                .map { utxo ->
+                    Coin(
+                        outpoint = "${utxo.outpoint.txid}:${utxo.outpoint.vout}",
+                        sats =
+                            utxo.txout.value
+                                .toSat()
+                                .toLong(),
+                        confirmations = confirmationsOf(utxo.chainPosition, tip),
+                        frozen = wallet.isOutpointLocked(utxo.outpoint),
+                    )
+                }.sortedByDescending { it.sats }
+        }
+
+    override suspend fun setFrozen(
+        outpoint: String,
+        frozen: Boolean,
+    ) = onWallet {
+        val point = outPointOf(outpoint)
+        if (frozen) wallet.lockOutpoint(point) else wallet.unlockOutpoint(point)
+        wallet.persist(persister)
+        Unit
+    }
+
+    private fun outPointOf(text: String): OutPoint {
+        val txid = text.substringBeforeLast(':')
+        val vout = text.substringAfterLast(':').toUIntOrNull()
+        require(vout != null && txid.length == 64) { "Not an outpoint: $text" }
+        return OutPoint(Txid.fromString(txid), vout)
+    }
+
+    override suspend fun heirCoins(): List<HeirCoin> =
+        onWallet {
+            val timelock = checkNotNull(vault) { "Not a Vault pocket" }.timelock.blocks
+            val tip = wallet.latestCheckpoint().height.toInt()
+            wallet.listUnspent().map { utxo ->
+                val confirmations = confirmationsOf(utxo.chainPosition, tip)
+                HeirCoin(
+                    utxo.txout.value
+                        .toSat()
+                        .toLong(),
+                    confirmations,
+                    (timelock - confirmations).coerceAtLeast(0),
+                )
+            }
+        }
+
+    override suspend fun planHeirClaim(
+        address: String,
+        feeRateSatPerVb: Long,
+    ): SpendPlan =
+        onWallet {
+            val timelock = checkNotNull(vault) { "Not a Vault pocket" }.timelock.blocks
+            val tip = wallet.latestCheckpoint().height.toInt()
+            // The app gates maturity itself (ADR 0002): BDK would finalize a premature heir spend.
+            val matured = wallet.listUnspent().filter { confirmationsOf(it.chainPosition, tip) >= timelock }.map { it.outpoint }
+            if (matured.isEmpty()) throw SpendException(SpendError.INSUFFICIENT_FUNDS)
+            val request = SpendRequest(address, SendAmount.Max, feeRateSatPerVb)
+            plan(request, sweep = matured) { builder ->
+                builder
+                    .excludeBelowConfirmations(timelock.toUInt())
+                    .policyPath(branchPath(KeychainKind.EXTERNAL, HEIR_BRANCH), KeychainKind.EXTERNAL)
+                    .policyPath(branchPath(KeychainKind.INTERNAL, HEIR_BRANCH), KeychainKind.INTERNAL)
+            }
+        }
+
+    override suspend fun sendHeirClaim(
+        plan: SpendPlan,
+        heirSeed: ByteArray,
+    ): String =
+        onWallet {
+            val config = checkNotNull(vault) { "Not a Vault pocket" }
+            Psbt(plan.psbtBase64).use { psbt ->
+                SpendGuard.check(psbt, wallet)
+                val secrets = mapOf(VaultRole.HEIR to VaultKeys.secretKey(heirSeed, network))
+                val signers =
+                    listOf("0", "1").map { branch ->
+                        Descriptor(
+                            config.descriptor(branch, secrets),
+                            network.toBdkNetworkKind(),
+                        ).use { SignersContainer.fromDescriptor(it) }
+                    }
+                val finalized =
+                    try {
+                        wallet.signWithSigners(psbt, signers)
+                    } finally {
+                        signers.forEach { it.close() }
+                    }
+                if (!finalized) throw SpendException(SpendError.SIGNING_FAILED)
+                broadcastSigned(psbt, plan) { tx -> VaultGuard.checkHeir(tx, config.timelock.blocks) }
+            }
+        }
+
+    private fun confirmationsOf(
+        position: ChainPosition,
+        tip: Int,
+    ): Int =
+        when (position) {
+            is ChainPosition.Confirmed -> {
+                (
+                    tip -
+                        position.confirmationBlockTime.blockId.height
+                            .toInt() + 1
+                ).coerceAtLeast(1)
+            }
+
+            is ChainPosition.Unconfirmed -> {
+                0
+            }
+        }
+
+    /** Extracts, checks against the plan (and [check]), broadcasts and records a signed PSBT. */
+    private fun broadcastSigned(
+        psbt: Psbt,
+        plan: SpendPlan,
+        check: (Transaction) -> Unit,
+    ): String {
+        val tx =
+            try {
+                psbt.extractTx() // also refuses an absurd fee rate
+            } catch (e: ExtractTxException) {
+                throw SpendException(SpendError.OTHER, e)
+            }
+        return tx.use {
+            verifyAgainstPlan(it, psbt, plan)
+            check(it)
+            broadcast(it)
+            // Record it now, so balance and history show it before the next sync.
+            wallet.applyUnconfirmedTxs(listOf(UnconfirmedTx(it, System.currentTimeMillis().toULong() / 1000u)))
+            wallet.persist(persister)
+            it.computeTxid().use { txid -> txid.toString() }
+        }
+    }
 
     /** The signed transaction must be exactly what the user reviewed. */
     private fun verifyAgainstPlan(
@@ -226,16 +471,30 @@ class BdkWallet internal constructor(
         }
     }
 
+    /** [sweep]: spend exactly these coins (heir claim, coin control); Max then sends all of them. */
     private fun buildPsbt(
         script: Script,
         request: SpendRequest,
+        sweep: List<OutPoint>?,
+        path: (TxBuilder) -> TxBuilder,
     ): Psbt =
         FeeRate.fromSatPerVb(request.feeRateSatPerVb.toULong()).use { rate ->
-            val base = SpendGuard.restrict(TxBuilder()).feeRate(rate)
+            val base = path(SpendGuard.restrict(TxBuilder()).feeRate(rate))
             val builder =
                 when (val amount = request.amount) {
-                    is SendAmount.Exact -> Amount.fromSat(amount.sats.toULong()).use { base.addRecipient(script, it) }
-                    SendAmount.Max -> base.drainWallet().drainTo(script)
+                    is SendAmount.Exact -> {
+                        Amount.fromSat(amount.sats.toULong()).use { base.addRecipient(script, it) }
+                    }
+
+                    SendAmount.Max -> {
+                        if (sweep !=
+                            null
+                        ) {
+                            base.addUtxos(sweep).manuallySelectedOnly().drainTo(script)
+                        } else {
+                            base.drainWallet().drainTo(script)
+                        }
+                    }
                 }
             try {
                 builder.finish(wallet)
@@ -301,7 +560,29 @@ class BdkWallet internal constructor(
         }
 
     companion object {
-        private const val DB_FILE = "spending.sqlite"
+        const val SPENDING_DB = "spending.sqlite"
+
+        /** Index of the 2-of-2 branch in the Vault's `or_d`. */
+        private const val MULTISIG_BRANCH = 0uL
+
+        /** Index of the heir branch (`and_v(v:pkh(HEIR),older(N))`). */
+        private const val HEIR_BRANCH = 1uL
+
+        /** A watch-only wallet that lives only in memory (the heir claim needs no files). */
+        fun inMemory(
+            descriptors: PublicDescriptors,
+            network: SupportedNetwork,
+            chain: ChainClient,
+            vault: VaultConfig,
+        ): BdkWallet =
+            Descriptor(descriptors.external, network.toBdkNetworkKind()).use { external ->
+                Descriptor(descriptors.internal, network.toBdkNetworkKind()).use { internal ->
+                    val persister = Persister.newInMemory()
+                    BdkWallet(Wallet(external, internal, network.toBdkNetwork(), persister), persister, network, chain, vault = vault)
+                }
+            }
+
+        const val VAULT_DB = "vault.sqlite"
 
         /**
          * Opens the wallet stored in [dir], creating it on first use. The database only caches
@@ -314,15 +595,25 @@ class BdkWallet internal constructor(
             network: SupportedNetwork,
             chain: ChainClient,
             dispatcher: CoroutineDispatcher = serialIoDispatcher(),
+            vault: VaultConfig? = null,
         ): BdkWallet {
             check(dir.isDirectory || dir.mkdirs()) { "Cannot create $dir" }
-            val db = File(dir, DB_FILE)
+            val db = File(dir, if (vault == null) SPENDING_DB else VAULT_DB)
             val kind = network.toBdkNetworkKind()
             return Descriptor(descriptors.external, kind).use { external ->
                 Descriptor(descriptors.internal, kind).use { internal ->
-                    loadOrNull(db, external, internal) { wallet, persister -> BdkWallet(wallet, persister, network, chain, dispatcher) }
+                    loadOrNull(db, external, internal) { wallet, persister ->
+                        BdkWallet(wallet, persister, network, chain, dispatcher, vault)
+                    }
                         ?: Persister.newSqlite(db.path).let { persister ->
-                            BdkWallet(Wallet(external, internal, network.toBdkNetwork(), persister), persister, network, chain, dispatcher)
+                            BdkWallet(
+                                Wallet(external, internal, network.toBdkNetwork(), persister),
+                                persister,
+                                network,
+                                chain,
+                                dispatcher,
+                                vault,
+                            )
                         }
                 }
             }

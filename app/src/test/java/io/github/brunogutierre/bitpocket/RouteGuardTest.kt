@@ -1,6 +1,10 @@
 package io.github.brunogutierre.bitpocket
 
+import io.github.brunogutierre.bitpocket.ui.navigation.ClaimInheritance
 import io.github.brunogutierre.bitpocket.ui.navigation.CreateSeed
+import io.github.brunogutierre.bitpocket.ui.navigation.DuressSettings
+import io.github.brunogutierre.bitpocket.ui.navigation.GuardrailsSettings
+import io.github.brunogutierre.bitpocket.ui.navigation.Health
 import io.github.brunogutierre.bitpocket.ui.navigation.Home
 import io.github.brunogutierre.bitpocket.ui.navigation.Lock
 import io.github.brunogutierre.bitpocket.ui.navigation.Receive
@@ -8,6 +12,8 @@ import io.github.brunogutierre.bitpocket.ui.navigation.RestoreSeed
 import io.github.brunogutierre.bitpocket.ui.navigation.Send
 import io.github.brunogutierre.bitpocket.ui.navigation.SetPin
 import io.github.brunogutierre.bitpocket.ui.navigation.TransactionDetails
+import io.github.brunogutierre.bitpocket.ui.navigation.VaultHome
+import io.github.brunogutierre.bitpocket.ui.navigation.VaultSetup
 import io.github.brunogutierre.bitpocket.ui.navigation.VerifySeed
 import io.github.brunogutierre.bitpocket.ui.navigation.Welcome
 import io.github.brunogutierre.bitpocket.ui.navigation.guardRoute
@@ -20,8 +26,15 @@ class RouteGuardTest {
         // After process death: wallet on disk, nothing in memory.
         fun afterDeath(route: androidx.navigation3.runtime.NavKey) = guardRoute(route, true, false, false, false)
         assertEquals(Lock, afterDeath(Home))
-        assertEquals(Lock, afterDeath(Receive))
-        assertEquals(Lock, afterDeath(Send))
+        assertEquals(Lock, afterDeath(Receive()))
+        assertEquals(Lock, afterDeath(Send()))
+        assertEquals(Lock, afterDeath(GuardrailsSettings))
+        assertEquals(Lock, afterDeath(DuressSettings))
+        assertEquals(Lock, afterDeath(Health))
+        assertEquals(Lock, afterDeath(VaultSetup(importing = false)))
+        // The heir claim needs no wallet at all.
+        assertEquals(ClaimInheritance, afterDeath(ClaimInheritance))
+        assertEquals(ClaimInheritance, guardRoute(ClaimInheritance, false, false, false, false))
         assertEquals(Lock, afterDeath(TransactionDetails("ab")))
         assertEquals(Lock, afterDeath(Welcome))
         assertEquals(Lock, afterDeath(SetPin))
@@ -33,7 +46,9 @@ class RouteGuardTest {
         assertEquals(RestoreSeed, guardRoute(RestoreSeed, false, false, false, false))
         assertEquals(Welcome, guardRoute(Lock, false, false, false, false))
         assertEquals(Home, guardRoute(Home, true, true, false, false))
-        assertEquals(Receive, guardRoute(Receive, true, true, false, false))
+        assertEquals(Receive(vault = true), guardRoute(Receive(vault = true), true, true, false, false))
+        assertEquals(VaultHome, guardRoute(VaultHome, true, true, false, false))
+        assertEquals(Lock, afterDeath(VaultHome))
         assertEquals(TransactionDetails("ab"), guardRoute(TransactionDetails("ab"), true, true, false, false))
     }
 }

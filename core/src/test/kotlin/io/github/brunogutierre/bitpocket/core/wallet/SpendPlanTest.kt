@@ -105,6 +105,27 @@ class SpendPlanTest {
         }
 
     @Test
+    fun `frozen coins are never spent, and manual selection spends exactly the chosen coins`() =
+        runTest {
+            val coins = wallet.coins()
+            assertEquals(listOf(50_000L, 20_000L), coins.map { it.sats })
+            assertEquals(listOf(6, 0), coins.map { it.confirmations })
+            val confirmed = coins.first().outpoint
+
+            wallet.setFrozen(confirmed, true)
+            assertTrue(wallet.coins().first().frozen)
+            assertEquals(
+                SpendError.INSUFFICIENT_FUNDS,
+                assertThrows<SpendException> { wallet.planSpend(request(SendAmount.Exact(1_000))) }.error,
+            )
+
+            wallet.setFrozen(confirmed, false)
+            val chosen = wallet.planSpend(request(SendAmount.Max).copy(coins = listOf(confirmed)))
+            assertEquals(1, chosen.inputCount)
+            assertEquals(50_000, chosen.totalSats)
+        }
+
+    @Test
     fun `the guard rejects a PSBT that spends an unconfirmed coin`() {
         val pending = bdkWallet.listUnspent().single { it.chainPosition is org.bitcoindevkit.ChainPosition.Unconfirmed }
         val psbt =

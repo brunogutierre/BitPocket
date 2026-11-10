@@ -5,8 +5,13 @@ import io.github.brunogutierre.bitpocket.FakeWalletAccess
 import io.github.brunogutierre.bitpocket.MainDispatcherExtension
 import io.github.brunogutierre.bitpocket.biometric.BiometricFailure
 import io.github.brunogutierre.bitpocket.biometric.BiometricSeedResult
+import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
+import io.github.brunogutierre.bitpocket.core.seed.Bip39
 import io.github.brunogutierre.bitpocket.core.send.AmountError
+import io.github.brunogutierre.bitpocket.core.send.BlockReason
+import io.github.brunogutierre.bitpocket.core.send.ConfirmReason
 import io.github.brunogutierre.bitpocket.core.send.FeeOptions
+import io.github.brunogutierre.bitpocket.core.send.GuardrailVerdict
 import io.github.brunogutierre.bitpocket.core.send.RecipientError
 import io.github.brunogutierre.bitpocket.core.send.SendAmount
 import io.github.brunogutierre.bitpocket.core.send.SpendError
@@ -14,7 +19,12 @@ import io.github.brunogutierre.bitpocket.core.send.SpendException
 import io.github.brunogutierre.bitpocket.core.send.SpendPlan
 import io.github.brunogutierre.bitpocket.core.send.SpendRequest
 import io.github.brunogutierre.bitpocket.core.session.SeedOutcome
+import io.github.brunogutierre.bitpocket.core.settings.Guardrails
+import io.github.brunogutierre.bitpocket.core.settings.ScheduledGuardrails
+import io.github.brunogutierre.bitpocket.core.settings.WalletSettings
+import io.github.brunogutierre.bitpocket.core.vault.VaultKeys
 import io.github.brunogutierre.bitpocket.core.wallet.ChainUnavailableException
+import io.github.brunogutierre.bitpocket.core.wallet.Coin
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -29,19 +39,28 @@ class SendViewModelTest {
     @RegisterExtension
     val main = MainDispatcherExtension()
 
-    private val pocket = FakePocketWallet().apply { fees = FeeOptions(fast = 9, normal = 4, slow = 1) }
+    // A known recipient and a large balance: the default guardrails then ask for nothing.
+    private val pocket =
+        FakePocketWallet().apply {
+            fees = FeeOptions(fast = 9, normal = 4, slow = 1)
+            stats = stats.copy(pastRecipients = setOf(ADDRESS), balanceSats = 1_000_000)
+        }
     private val access = FakeWalletAccess()
     private val plan = SpendPlan("cHNidP8=", ADDRESS, 10_000, 300, 4, 39_700, 1)
 
     private fun SendViewModel(
         pocket: FakePocketWallet,
         biometricSeed: ByteArray? = null,
-    ) = SendViewModel(pocket, access, biometricSeed, main.dispatcher)
+        settings: WalletSettings = WalletSettings(),
+    ) = SendViewModel(pocket, access, biometricSeed, settings, workDispatcher = main.dispatcher)
 
     /** A view model already on REVIEW with [plan]. */
-    private fun reviewing(biometricSeed: ByteArray? = null): SendViewModel {
+    private fun reviewing(
+        biometricSeed: ByteArray? = null,
+        settings: WalletSettings = WalletSettings(),
+    ): SendViewModel {
         pocket.plans += plan
-        return SendViewModel(pocket, biometricSeed).apply {
+        return SendViewModel(pocket, biometricSeed, settings).apply {
             onAddressChange(ADDRESS)
             onAmountChange("10000")
             review()
@@ -201,7 +220,155 @@ class SendViewModelTest {
         assertFalse(vm.state.value.broadcastFailed)
     }
 
+    @Test
+    fun `a spend over a hard limit cannot be confirmed`() {
+        val vm = reviewing(settings = WalletSettings(guardrails = Guardrails(perTxLimitSats = 5_000)))
+
+        assertEquals(GuardrailVerdict.Blocked(BlockReason.PER_TX_LIMIT, 5_000), vm.state.value.guardrail)
+        assertFalse(vm.state.value.canConfirm)
+        vm.confirm()
+        assertEquals(SendStage.REVIEW, vm.state.value.stage)
+    }
+
+    @Test
+    fun `a loosening only counts once the synced tip reaches it`() {
+        val strict = Guardrails(perTxLimitSats = 5_000)
+        val settings =
+            WalletSettings(guardrails = strict, scheduledGuardrails = ScheduledGuardrails(Guardrails(), activatesAtHeight = 1_001))
+
+        assertFalse(reviewing(settings = settings).state.value.canConfirm)
+        pocket.stats = pocket.stats.copy(tipHeight = 1_001)
+        assertTrue(reviewing(settings = settings).state.value.canConfirm)
+    }
+
+    @Test
+    fun `new recipients and large shares must be ticked before confirming`() {
+        pocket.stats = pocket.stats.copy(pastRecipients = emptySet(), balanceSats = 15_000)
+        val vm = reviewing(biometricSeed = byteArrayOf(1))
+        val reasons = setOf(ConfirmReason.NEW_RECIPIENT, ConfirmReason.LARGE_SHARE)
+        assertEquals(GuardrailVerdict.NeedsConfirmation(reasons), vm.state.value.guardrail)
+
+        vm.acknowledge(ConfirmReason.NEW_RECIPIENT, true)
+        vm.confirm()
+        assertEquals(SendStage.REVIEW, vm.state.value.stage)
+
+        vm.acknowledge(ConfirmReason.LARGE_SHARE, true)
+        vm.confirm()
+        assertEquals(SendStage.AUTH_BIOMETRIC, vm.state.value.stage)
+    }
+
+    @Test
+    fun `a recipient that looks like an own address must be confirmed`() {
+        val own = "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx"
+        pocket.stats = pocket.stats.copy(pastRecipients = setOf(LOOKALIKE), ownAddresses = setOf(own))
+        pocket.plans += plan.copy(recipient = LOOKALIKE)
+        val vm = SendViewModel(pocket)
+        vm.onAddressChange(LOOKALIKE)
+        vm.onAmountChange("10000")
+
+        vm.review()
+
+        assertEquals(own, vm.state.value.lookalikeOf)
+        assertEquals(GuardrailVerdict.NeedsConfirmation(setOf(ConfirmReason.LOOKALIKE)), vm.state.value.guardrail)
+        assertFalse(vm.state.value.canConfirm)
+    }
+
+    @Test
+    fun `a scanned BIP21 link fills recipient and amount, and cancelling keeps the form`() {
+        val vm = SendViewModel(pocket)
+        vm.onScanned("ignored outside the scanner")
+        assertEquals("", vm.state.value.addressText)
+
+        vm.startScan()
+        assertEquals(SendStage.SCAN, vm.state.value.stage)
+        vm.cancelScan()
+        assertEquals(SendStage.EDIT, vm.state.value.stage)
+
+        vm.startScan()
+        vm.onScanned("bitcoin:$ADDRESS?amount=0.0005")
+        assertEquals(SendStage.EDIT, vm.state.value.stage)
+        assertEquals("bitcoin:$ADDRESS?amount=0.0005", vm.state.value.addressText)
+        assertEquals("50000", vm.state.value.amountText)
+    }
+
+    @Test
+    fun `Move to Vault starts with the Vault address`() {
+        val vm = SendViewModel(pocket, access, null, WalletSettings(), { ADDRESS }, workDispatcher = main.dispatcher)
+
+        assertEquals(ADDRESS, vm.state.value.addressText)
+    }
+
+    @Test
+    fun `Vault spends ask for the recovery words, check them, then the PIN`() {
+        val recoveryEntropy = ByteArray(16) { 2 }
+        val recoveryKey = VaultKeys.publicKey(recoveryEntropy, SupportedNetwork.SIGNET)
+        val words = Bip39.toWords(recoveryEntropy).joinToString(" ")
+        pocket.plans += plan
+        access.seedOutcomes += SeedOutcome.Seed(ByteArray(16) { 1 })
+        val vm = SendViewModel(pocket, access, null, WalletSettings(), null, recoveryKey, workDispatcher = main.dispatcher)
+        vm.onAddressChange(ADDRESS)
+        vm.onAmountChange("10000")
+        vm.review()
+
+        vm.confirm()
+        assertEquals(SendStage.RECOVERY, vm.state.value.stage)
+        vm.onRecoveryTextChange("abandon " + words.substringAfter(' '))
+        vm.submitRecovery()
+        assertTrue(vm.state.value.recoveryError)
+
+        vm.onRecoveryTextChange("  ${words.uppercase()} ")
+        vm.submitRecovery()
+        assertEquals(SendStage.AUTH_PIN, vm.state.value.stage)
+        assertEquals("", vm.state.value.recoveryText)
+        "123456".forEach(vm::pinDigit)
+
+        assertEquals(SendStage.DONE, vm.state.value.stage)
+        assertEquals(listOf(1.toByte() to 2.toByte()), pocket.vaultSends)
+        assertTrue(pocket.sentWith.isEmpty(), "never the single-key path")
+    }
+
+    @Test
+    fun `the Vault refresh starts with send everything to the prefilled address`() {
+        val vm = SendViewModel(pocket, access, null, WalletSettings(), { ADDRESS }, "key", true, main.dispatcher)
+
+        assertTrue(vm.state.value.sendMax)
+        assertEquals(ADDRESS, vm.state.value.addressText)
+        assertTrue(vm.isVault)
+    }
+
+    @Test
+    fun `hand-picked coins go into the spend request`() {
+        pocket.coinList =
+            listOf(
+                Coin("a".repeat(64) + ":0", 9_000, 3, frozen = false),
+                Coin("b".repeat(64) + ":1", 5_000, 3, frozen = true),
+                Coin("c".repeat(64) + ":0", 4_000, 0, frozen = false),
+            )
+        pocket.plans += plan
+        val vm = SendViewModel(pocket)
+        vm.onAddressChange(ADDRESS)
+        vm.onAmountChange("1000")
+
+        vm.chooseCoins()
+        assertEquals(SendStage.COINS, vm.state.value.stage)
+        assertEquals(
+            listOf(9_000L),
+            vm.state.value.availableCoins
+                .map { it.sats },
+            "frozen and pending coins cannot be picked",
+        )
+        vm.toggleCoin("a".repeat(64) + ":0")
+        vm.doneChoosingCoins()
+        vm.review()
+
+        assertEquals(listOf("a".repeat(64) + ":0"), pocket.lastSpendRequest!!.coins)
+    }
+
     private companion object {
         const val ADDRESS = "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx"
+
+        // A valid testnet P2WPKH address with the same "qw50" start and "jzsx" end as ADDRESS,
+        // found by brute force in ~4 million tries: what a poisoning address looks like.
+        const val LOOKALIKE = "tb1qw50vy30pdhwf3xn46m0u2auv3d7gm5fdhnjzsx"
     }
 }

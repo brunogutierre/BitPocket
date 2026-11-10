@@ -1,5 +1,6 @@
 package io.github.brunogutierre.bitpocket.ui.home
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -13,6 +14,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -28,6 +30,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.brunogutierre.bitpocket.R
 import io.github.brunogutierre.bitpocket.core.format.BitcoinFormat
+import io.github.brunogutierre.bitpocket.core.vault.HeartbeatStatus
 import io.github.brunogutierre.bitpocket.core.wallet.Balance
 import io.github.brunogutierre.bitpocket.home.HomeViewModel
 import io.github.brunogutierre.bitpocket.ui.components.BitPocketTopBar
@@ -39,6 +42,7 @@ import io.github.brunogutierre.bitpocket.ui.history.TransactionRow
 import io.github.brunogutierre.bitpocket.ui.theme.Spacing
 import io.github.brunogutierre.bitpocket.ui.theme.monoTypography
 import io.github.brunogutierre.bitpocket.ui.theme.screenHorizontalPadding
+import io.github.brunogutierre.bitpocket.ui.vault.HeartbeatNotice
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,6 +51,9 @@ fun HomeScreen(
     onReceive: () -> Unit,
     onSend: () -> Unit,
     onSettings: () -> Unit,
+    onVault: () -> Unit,
+    onSetUpVault: () -> Unit,
+    onHealth: () -> Unit,
     onTransaction: (txid: String) -> Unit,
     onLocked: () -> Unit,
 ) {
@@ -84,6 +91,22 @@ fun HomeScreen(
                         PrimaryButton(stringResource(R.string.home_send), onClick = onSend, modifier = Modifier.weight(1f))
                     }
                 }
+                item { VaultCard(state.vaultBalance, onVault, onSetUpVault) }
+                state.health?.let { report ->
+                    item {
+                        ListItem(
+                            headlineContent = { Text(stringResource(R.string.health_title)) },
+                            supportingContent = { Text(stringResource(R.string.health_grade, report.grade.name, report.score)) },
+                            modifier =
+                                Modifier
+                                    .background(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.shapes.medium)
+                                    .clickable(onClick = onHealth),
+                        )
+                    }
+                }
+                state.vaultHeartbeat?.takeIf { it.status != HeartbeatStatus.OK }?.let { heartbeat ->
+                    item { HeartbeatNotice(heartbeat, onRefresh = onVault) }
+                }
                 item { Text(stringResource(R.string.home_activity), style = MaterialTheme.typography.titleMedium) }
                 if (state.history.isEmpty()) {
                     item {
@@ -94,7 +117,9 @@ fun HomeScreen(
                         )
                     }
                 }
-                items(state.history, key = { it.txid }) { item -> TransactionRow(item, Modifier.clickable { onTransaction(item.txid) }) }
+                items(state.history, key = {
+                    it.txid
+                }) { item -> TransactionRow(item, Modifier.clickable { onTransaction(item.txid) }, state.labels[item.txid]) }
                 item {
                     SecondaryButton(stringResource(R.string.home_lock), onClick = {
                         viewModel.lock()
@@ -138,4 +163,23 @@ private fun BalanceHeader(balance: Balance?) {
             }
         }
     }
+}
+
+/** The Vault pocket at a glance, or an invitation to set it up. */
+@Composable
+private fun VaultCard(
+    balance: Balance?,
+    onOpen: () -> Unit,
+    onSetUp: () -> Unit,
+) {
+    ListItem(
+        headlineContent = { Text(stringResource(R.string.vault_title)) },
+        supportingContent = {
+            Text(if (balance == null) stringResource(R.string.vault_card_set_up) else BitcoinFormat.sats(balance.totalSats))
+        },
+        modifier =
+            Modifier
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.shapes.medium)
+                .clickable(onClick = if (balance == null) onSetUp else onOpen),
+    )
 }

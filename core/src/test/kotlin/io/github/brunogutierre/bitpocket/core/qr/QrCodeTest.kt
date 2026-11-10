@@ -5,6 +5,7 @@ import com.google.zxing.RGBLuminanceSource
 import com.google.zxing.common.HybridBinarizer
 import com.google.zxing.qrcode.QRCodeReader
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -29,6 +30,28 @@ class QrCodeTest {
         assertTrue(upper.size < lower.size, "${upper.size} vs ${lower.size}")
         // Version n has 17 + 4n modules per side.
         assertEquals(0, (upper.size - 17) % 4)
+    }
+
+    @Test
+    fun `decodes a camera-like grayscale frame, with row padding`() {
+        val uri = "bitcoin:tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx?amount=0.001"
+        val matrix = QrCode.encode(uri)
+        val scale = 6
+        val side = (matrix.size + 2 * QrCode.QUIET_ZONE) * scale
+        val stride = side + 16 // camera buffers often pad each row
+        val frame =
+            ByteArray(stride * side) { i ->
+                val x = i % stride / scale - QrCode.QUIET_ZONE
+                val y = i / stride / scale - QrCode.QUIET_ZONE
+                if (x in 0 until matrix.size && y in 0 until matrix.size && matrix[x, y]) 0 else -1
+            }
+
+        assertEquals(uri, QrCode.decode(frame, side, side, rowStride = stride))
+    }
+
+    @Test
+    fun `a frame without a QR code decodes to null`() {
+        assertNull(QrCode.decode(ByteArray(100 * 100) { (it * 31).toByte() }, 100, 100))
     }
 
     @Test

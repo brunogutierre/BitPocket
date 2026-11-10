@@ -1,6 +1,13 @@
 package io.github.brunogutierre.bitpocket.core.qr
 
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.BinaryBitmap
+import com.google.zxing.DecodeHintType
 import com.google.zxing.EncodeHintType
+import com.google.zxing.PlanarYUVLuminanceSource
+import com.google.zxing.ReaderException
+import com.google.zxing.common.HybridBinarizer
+import com.google.zxing.qrcode.QRCodeReader
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import com.google.zxing.qrcode.encoder.Encoder
 
@@ -34,5 +41,25 @@ object QrCode {
         val matrix = Encoder.encode(text, ErrorCorrectionLevel.M, mapOf(EncodeHintType.CHARACTER_SET to "UTF-8")).matrix
         val size = matrix.width
         return QrMatrix(size, BooleanArray(size * size) { matrix.get(it % size, it / size).toInt() == 1 })
+    }
+
+    /**
+     * Reads a QR code from a grayscale frame (e.g. the camera's Y plane, [rowStride] bytes per
+     * row), or returns null when there is none or it cannot be read.
+     */
+    fun decode(
+        luminance: ByteArray,
+        width: Int,
+        height: Int,
+        rowStride: Int = width,
+    ): String? {
+        val source = PlanarYUVLuminanceSource(luminance, rowStride, height, 0, 0, width, height, false)
+        val hints = mapOf(DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE))
+        // A new reader per frame: zxing readers keep state and are not thread-safe.
+        return try {
+            QRCodeReader().decode(BinaryBitmap(HybridBinarizer(source)), hints).text
+        } catch (e: ReaderException) {
+            null
+        }
     }
 }
