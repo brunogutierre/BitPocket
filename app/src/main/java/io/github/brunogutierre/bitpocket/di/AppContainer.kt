@@ -20,6 +20,8 @@ import io.github.brunogutierre.bitpocket.core.session.Session
 import io.github.brunogutierre.bitpocket.core.session.SlotWalletAccess
 import io.github.brunogutierre.bitpocket.core.session.WalletAccess
 import io.github.brunogutierre.bitpocket.core.session.WalletWipe
+import io.github.brunogutierre.bitpocket.core.vault.HeirClaim
+import io.github.brunogutierre.bitpocket.core.vault.HeirClaimOpen
 import io.github.brunogutierre.bitpocket.core.wallet.BdkWalletOpener
 import io.github.brunogutierre.bitpocket.core.wallet.EsploraChainClient
 import io.github.brunogutierre.bitpocket.keystore.AndroidUnlockClock
@@ -79,6 +81,12 @@ class AppContainer(
     }
 
     fun vaultBackup(): ByteArray? = vaultBackupFile()?.takeIf { it.isFile }?.readBytes()
+
+    /** Opens a Vault backup for an heir claim, with this app's Esplora clients. */
+    fun openHeirClaim(
+        backup: ByteArray,
+        heirSeed: ByteArray,
+    ): HeirClaimOpen = HeirClaim.open(backup, heirSeed) { network -> EsploraChainClient(network.esploraBaseUrl) }
 
     fun biometricAvailable(): Boolean = BiometricAvailability.status(appContext) == BiometricStatus.AVAILABLE
 

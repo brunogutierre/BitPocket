@@ -16,6 +16,7 @@ fun guardRoute(
     val home = if (walletExists) Lock else Welcome
     return when (route) {
         Home, Settings, ChangePin, GuardrailsSettings, VaultHome -> if (unlocked) route else home
+        ClaimInheritance -> route
         is Receive, is Send, is TransactionDetails, is VaultSetup -> if (unlocked) route else home
         Lock -> if (walletExists) Lock else Welcome
         Welcome, RestoreSeed -> if (walletExists) Lock else route

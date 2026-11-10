@@ -45,8 +45,10 @@ import io.github.brunogutierre.bitpocket.ui.send.SendScreen
 import io.github.brunogutierre.bitpocket.ui.settings.ChangePinScreen
 import io.github.brunogutierre.bitpocket.ui.settings.GuardrailsScreen
 import io.github.brunogutierre.bitpocket.ui.settings.SettingsScreen
+import io.github.brunogutierre.bitpocket.ui.vault.HeirClaimScreen
 import io.github.brunogutierre.bitpocket.ui.vault.VaultScreen
 import io.github.brunogutierre.bitpocket.ui.vault.VaultSetupScreen
+import io.github.brunogutierre.bitpocket.vault.HeirClaimViewModel
 import io.github.brunogutierre.bitpocket.vault.VaultSetupViewModel
 import io.github.brunogutierre.bitpocket.vault.VaultViewModel
 import kotlinx.coroutines.flow.drop
@@ -115,6 +117,7 @@ fun BitPocketNavHost(
                         viewModel { WelcomeViewModel(container.onboardingDraft, container.mnemonicService) },
                         onShowNewSeed = { backStack.add(CreateSeed) },
                         onRestore = { backStack.add(RestoreSeed) },
+                        onClaimInheritance = { backStack.add(ClaimInheritance) },
                     )
                 }
                 entry<CreateSeed> {
@@ -231,6 +234,7 @@ fun BitPocketNavHost(
                         onGuardrails = { backStack.add(GuardrailsSettings) },
                         onSetUpVault = { backStack.add(VaultSetup(importing = false)) },
                         onImportVault = { backStack.add(VaultSetup(importing = true)) },
+                        onClaimInheritance = { backStack.add(ClaimInheritance) },
                         vaultBackup = container::vaultBackup,
                         onLock = {
                             container.session.lock()
@@ -254,6 +258,9 @@ fun BitPocketNavHost(
                         importing = route.importing,
                         onClose = back,
                     )
+                }
+                entry<ClaimInheritance> {
+                    HeirClaimScreen(viewModel { HeirClaimViewModel(container::openHeirClaim) }, onClose = back)
                 }
                 entry<ChangePin> {
                     ChangePinScreen(viewModel { ChangePinViewModel(container.walletAccess) }, onBack = back, onChanged = back)

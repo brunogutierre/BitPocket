@@ -45,6 +45,10 @@ data class Send(
 @Serializable
 data object VaultHome : NavKey
 
+/** The heir's claim: needs no wallet on this phone. */
+@Serializable
+data object ClaimInheritance : NavKey
+
 @Serializable
 data object Settings : NavKey
 

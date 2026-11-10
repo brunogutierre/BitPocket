@@ -60,6 +60,7 @@ fun SettingsScreen(
     onGuardrails: () -> Unit,
     onSetUpVault: () -> Unit,
     onImportVault: () -> Unit,
+    onClaimInheritance: () -> Unit,
     vaultBackup: () -> ByteArray?,
     onLock: () -> Unit,
     onWiped: () -> Unit,
@@ -85,7 +86,7 @@ fun SettingsScreen(
                 onBack,
                 onChangePin,
                 onGuardrails,
-                VaultActions(onSetUpVault, onImportVault, vaultBackup),
+                VaultActions(onSetUpVault, onImportVault, vaultBackup, onClaimInheritance),
                 onLock,
             )
         }
@@ -154,6 +155,7 @@ private fun SettingsList(
                 Entry(stringResource(R.string.settings_vault_set_up), stringResource(R.string.settings_vault_set_up_body), vault.setUp)
                 Entry(stringResource(R.string.settings_vault_import), stringResource(R.string.settings_vault_import_body), vault.import)
             }
+            Entry(stringResource(R.string.heir_title), stringResource(R.string.settings_heir_body), vault.claimInheritance)
             HorizontalDivider()
             SectionTitle(stringResource(R.string.settings_about))
             ListItem(
@@ -308,4 +310,5 @@ class VaultActions(
     val setUp: () -> Unit,
     val import: () -> Unit,
     val backup: () -> ByteArray?,
+    val claimInheritance: () -> Unit,
 )
