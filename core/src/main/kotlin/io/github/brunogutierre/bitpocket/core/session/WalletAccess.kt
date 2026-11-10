@@ -12,6 +12,12 @@ import io.github.brunogutierre.bitpocket.core.seed.BiometricRewrap
 import io.github.brunogutierre.bitpocket.core.seed.BiometricSeedVault
 import io.github.brunogutierre.bitpocket.core.seed.SlotPayload
 import io.github.brunogutierre.bitpocket.core.settings.WalletSettings
+import io.github.brunogutierre.bitpocket.core.vault.HeirTimelock
+import io.github.brunogutierre.bitpocket.core.vault.VaultBackup
+import io.github.brunogutierre.bitpocket.core.vault.VaultBackupContents
+import io.github.brunogutierre.bitpocket.core.vault.VaultConfig
+import io.github.brunogutierre.bitpocket.core.vault.VaultKeys
+import io.github.brunogutierre.bitpocket.core.vault.VaultRole
 import io.github.brunogutierre.bitpocket.core.wallet.WalletOpener
 import java.time.Duration
 import kotlin.coroutines.cancellation.CancellationException
@@ -66,6 +72,25 @@ sealed interface SettingsOutcome {
     data object Failed : SettingsOutcome
 }
 
+/** Result of setting up or importing the Vault. */
+sealed interface VaultSetupOutcome {
+    /** [backup] is the encrypted Vault backup to keep and export (ADR 0007). */
+    class Done(
+        val backup: ByteArray,
+    ) : VaultSetupOutcome
+
+    /** Wrong PIN, lockout or storage error. */
+    data class Denied(
+        val outcome: SettingsOutcome,
+    ) : VaultSetupOutcome
+
+    /** This wallet already has a Vault: a second one would hide the first one's coins. */
+    data object AlreadySetUp : VaultSetupOutcome
+
+    /** The backup is malformed, for another network, or not for this wallet's seed. */
+    data object NotThisWallet : VaultSetupOutcome
+}
+
 /** Creates the wallet and unlocks it into the [Session]. Blocking and slow: call off the main thread. */
 interface WalletAccess {
     fun create(
@@ -99,6 +124,23 @@ interface WalletAccess {
 
     /** Checks the session PIN (e.g. before wiping) without decrypting anything for the caller. */
     fun verifyPin(pin: CharArray): SettingsOutcome
+
+    /**
+     * Creates the Vault after checking [pin]: PHONE comes from the wallet seed, RECOVERY and HEIR from
+     * the given seed entropies (the caller wipes them). Saves the public description in the slot.
+     */
+    fun setUpVault(
+        pin: CharArray,
+        recoveryEntropy: ByteArray,
+        heirEntropy: ByteArray,
+        timelock: HeirTimelock,
+    ): VaultSetupOutcome
+
+    /** Restores the Vault of a restored wallet from its backup, opened with this wallet's seed. */
+    fun importVault(
+        pin: CharArray,
+        backup: ByteArray,
+    ): VaultSetupOutcome
 
     /** Saves new security settings in the slot after checking [pin] (ADR 0005). */
     fun updateSettings(
@@ -224,6 +266,82 @@ class SlotWalletAccess(
             SettingsOutcome.Done
         }
 
+    override fun setUpVault(
+        pin: CharArray,
+        recoveryEntropy: ByteArray,
+        heirEntropy: ByteArray,
+        timelock: HeirTimelock,
+    ): VaultSetupOutcome =
+        withVaultPayload(pin) { slot, payload ->
+            if (payload.settings.vault != null) return@withVaultPayload VaultSetupOutcome.AlreadySetUp
+            val network = payload.network
+            val config =
+                VaultConfig(
+                    phoneKey = VaultKeys.publicKey(payload.seedEntropy, network),
+                    recoveryKey = VaultKeys.publicKey(recoveryEntropy, network),
+                    heirKey = VaultKeys.publicKey(heirEntropy, network),
+                    timelock = timelock,
+                )
+            val seeds = mapOf(VaultRole.PHONE to payload.seedEntropy, VaultRole.RECOVERY to recoveryEntropy, VaultRole.HEIR to heirEntropy)
+            val backup = VaultBackup.seal(VaultBackupContents(network, config), seeds)
+            saveVault(slot, pin, payload, config)
+            VaultSetupOutcome.Done(backup)
+        }
+
+    override fun importVault(
+        pin: CharArray,
+        backup: ByteArray,
+    ): VaultSetupOutcome =
+        withVaultPayload(pin) { slot, payload ->
+            if (payload.settings.vault != null) return@withVaultPayload VaultSetupOutcome.AlreadySetUp
+            val contents =
+                try {
+                    VaultBackup.open(backup, payload.seedEntropy)
+                } catch (e: IllegalArgumentException) {
+                    null
+                }
+            // Opened with this seed AND this seed is the Vault's PHONE key, on the same network.
+            val ours =
+                contents?.takeIf {
+                    it.network == payload.network &&
+                        it.config.phoneKey == VaultKeys.publicKey(payload.seedEntropy, it.network)
+                }
+            if (ours == null) return@withVaultPayload VaultSetupOutcome.NotThisWallet
+            saveVault(slot, pin, payload, ours.config)
+            VaultSetupOutcome.Done(backup)
+        }
+
+    private fun saveVault(
+        slot: SlotId,
+        pin: CharArray,
+        payload: SlotPayload,
+        config: VaultConfig,
+    ) {
+        val settings = payload.settings.copy(vault = config)
+        save(slot, pin, payload.withSettings(settings))
+        session.updateSettings(settings)
+    }
+
+    private fun withVaultPayload(
+        pin: CharArray,
+        block: (SlotId, SlotPayload) -> VaultSetupOutcome,
+    ): VaultSetupOutcome =
+        when (val result = reauthenticate(pin)) {
+            is Reauth.Denied -> {
+                VaultSetupOutcome.Denied(result.outcome)
+            }
+
+            is Reauth.Ok -> {
+                try {
+                    block(result.slot, result.payload)
+                } catch (e: KeyUnavailableException) {
+                    VaultSetupOutcome.Denied(SettingsOutcome.Failed)
+                } finally {
+                    result.payload.seedEntropy.wipe()
+                }
+            }
+        }
+
     private sealed interface Reauth {
         class Ok(
             val slot: SlotId,
@@ -308,7 +426,7 @@ class SlotWalletAccess(
     ) {
         try {
             val spending = opener.open(payload)
-            session.open(UnlockedWallet(slot, payload.network, payload.biometricSeed, spending, payload.settings))
+            session.open(UnlockedWallet(slot, payload.network, payload.biometricSeed, spending, payload.settings, opener.dirOf(payload)))
         } finally {
             payload.seedEntropy.wipe()
         }

@@ -2,6 +2,8 @@ package io.github.brunogutierre.bitpocket.ui.settings
 
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -46,6 +48,8 @@ import io.github.brunogutierre.bitpocket.ui.components.SecureScreen
 import io.github.brunogutierre.bitpocket.ui.components.SeedWordGrid
 import io.github.brunogutierre.bitpocket.ui.components.WarningBanner
 import io.github.brunogutierre.bitpocket.ui.theme.Spacing
+import io.github.brunogutierre.bitpocket.ui.vault.VAULT_BACKUP_FILE_NAME
+import io.github.brunogutierre.bitpocket.ui.vault.writeDocument
 
 @Composable
 fun SettingsScreen(
@@ -54,17 +58,37 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onChangePin: () -> Unit,
     onGuardrails: () -> Unit,
+    onSetUpVault: () -> Unit,
+    onImportVault: () -> Unit,
+    vaultBackup: () -> ByteArray?,
     onLock: () -> Unit,
     onWiped: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { viewModel.refresh() }
     LaunchedEffect(state.wiped) { if (state.wiped) onWiped() }
     val phrase = state.phrase
     val action = state.action
     when {
-        phrase != null -> RecoveryPhrase(phrase, viewModel::closePhrase)
-        action != null -> PinStep(viewModel, state, action, seedCipher)
-        else -> SettingsList(viewModel, state, onBack, onChangePin, onGuardrails, onLock)
+        phrase != null -> {
+            RecoveryPhrase(phrase, viewModel::closePhrase)
+        }
+
+        action != null -> {
+            PinStep(viewModel, state, action, seedCipher)
+        }
+
+        else -> {
+            SettingsList(
+                viewModel,
+                state,
+                onBack,
+                onChangePin,
+                onGuardrails,
+                VaultActions(onSetUpVault, onImportVault, vaultBackup),
+                onLock,
+            )
+        }
     }
 }
 
@@ -75,9 +99,15 @@ private fun SettingsList(
     onBack: () -> Unit,
     onChangePin: () -> Unit,
     onGuardrails: () -> Unit,
+    vault: VaultActions,
     onLock: () -> Unit,
 ) {
     val context = LocalContext.current
+    val exportBackup =
+        rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+            val bytes = vault.backup()
+            if (uri != null && bytes != null) writeDocument(context, uri, bytes)
+        }
     val version =
         remember {
             context.packageManager
@@ -114,6 +144,16 @@ private fun SettingsList(
             )
             Entry(stringResource(R.string.settings_change_pin), null, onChangePin)
             Entry(stringResource(R.string.home_lock), stringResource(R.string.settings_lock_body), onLock)
+            HorizontalDivider()
+            SectionTitle(stringResource(R.string.settings_vault))
+            if (state.hasVault) {
+                Entry(stringResource(R.string.settings_vault_export), stringResource(R.string.settings_vault_export_body), {
+                    exportBackup.launch(VAULT_BACKUP_FILE_NAME)
+                })
+            } else {
+                Entry(stringResource(R.string.settings_vault_set_up), stringResource(R.string.settings_vault_set_up_body), vault.setUp)
+                Entry(stringResource(R.string.settings_vault_import), stringResource(R.string.settings_vault_import_body), vault.import)
+            }
             HorizontalDivider()
             SectionTitle(stringResource(R.string.settings_about))
             ListItem(
@@ -262,3 +302,10 @@ private fun Entry(
         modifier = Modifier.clickable(onClick = onClick),
     )
 }
+
+/** Vault entries of the Settings list. */
+class VaultActions(
+    val setUp: () -> Unit,
+    val import: () -> Unit,
+    val backup: () -> ByteArray?,
+)

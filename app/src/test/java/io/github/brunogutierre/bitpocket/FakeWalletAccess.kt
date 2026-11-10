@@ -5,8 +5,10 @@ import io.github.brunogutierre.bitpocket.core.seed.BiometricSeedVault
 import io.github.brunogutierre.bitpocket.core.session.SeedOutcome
 import io.github.brunogutierre.bitpocket.core.session.SettingsOutcome
 import io.github.brunogutierre.bitpocket.core.session.UnlockOutcome
+import io.github.brunogutierre.bitpocket.core.session.VaultSetupOutcome
 import io.github.brunogutierre.bitpocket.core.session.WalletAccess
 import io.github.brunogutierre.bitpocket.core.settings.WalletSettings
+import io.github.brunogutierre.bitpocket.core.vault.HeirTimelock
 
 class FakeWalletAccess : WalletAccess {
     var createdPin: String? = null
@@ -71,5 +73,27 @@ class FakeWalletAccess : WalletAccess {
     ): SettingsOutcome {
         settingsCalls += "settings ${String(pin)} ${settings.autoLock}"
         return settingsOutcomes.removeFirst()
+    }
+
+    /** Answers for [setUpVault] and [importVault], in order. */
+    val vaultOutcomes = ArrayDeque<VaultSetupOutcome>()
+    val vaultCalls = mutableListOf<String>()
+
+    override fun setUpVault(
+        pin: CharArray,
+        recoveryEntropy: ByteArray,
+        heirEntropy: ByteArray,
+        timelock: HeirTimelock,
+    ): VaultSetupOutcome {
+        vaultCalls += "setUp ${String(pin)} ${recoveryEntropy.first()} ${heirEntropy.first()} $timelock"
+        return vaultOutcomes.removeFirst()
+    }
+
+    override fun importVault(
+        pin: CharArray,
+        backup: ByteArray,
+    ): VaultSetupOutcome {
+        vaultCalls += "import ${String(pin)} ${backup.size}"
+        return vaultOutcomes.removeFirst()
     }
 }
