@@ -4,6 +4,7 @@ import io.github.brunogutierre.bitpocket.ui.navigation.ClaimInheritance
 import io.github.brunogutierre.bitpocket.ui.navigation.CreateSeed
 import io.github.brunogutierre.bitpocket.ui.navigation.DuressSettings
 import io.github.brunogutierre.bitpocket.ui.navigation.GuardrailsSettings
+import io.github.brunogutierre.bitpocket.ui.navigation.Health
 import io.github.brunogutierre.bitpocket.ui.navigation.Home
 import io.github.brunogutierre.bitpocket.ui.navigation.Lock
 import io.github.brunogutierre.bitpocket.ui.navigation.Receive
@@ -29,6 +30,7 @@ class RouteGuardTest {
         assertEquals(Lock, afterDeath(Send()))
         assertEquals(Lock, afterDeath(GuardrailsSettings))
         assertEquals(Lock, afterDeath(DuressSettings))
+        assertEquals(Lock, afterDeath(Health))
         assertEquals(Lock, afterDeath(VaultSetup(importing = false)))
         // The heir claim needs no wallet at all.
         assertEquals(ClaimInheritance, afterDeath(ClaimInheritance))

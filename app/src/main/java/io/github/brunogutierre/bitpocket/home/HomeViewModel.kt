@@ -2,6 +2,7 @@ package io.github.brunogutierre.bitpocket.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.brunogutierre.bitpocket.core.health.HealthReport
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
 import io.github.brunogutierre.bitpocket.core.vault.Heartbeat
 import io.github.brunogutierre.bitpocket.core.wallet.Balance
@@ -26,6 +27,7 @@ data class HomeUiState(
     val vaultHeartbeat: Heartbeat? = null,
     /** BIP329 transaction labels, by txid. */
     val labels: Map<String, String> = emptyMap(),
+    val health: HealthReport? = null,
 )
 
 /**
@@ -38,6 +40,7 @@ class HomeViewModel(
     /** The Vault pocket, read each time: it can be set up while Home is on the back stack. */
     private val vault: () -> VaultPocket? = { null },
     private val labels: () -> Map<String, String> = { emptyMap() },
+    private val health: suspend () -> HealthReport? = { null },
 ) : ViewModel() {
     val network: SupportedNetwork = pocket.network
     private val _state = MutableStateFlow(HomeUiState())
@@ -79,6 +82,7 @@ class HomeViewModel(
         val vaultBalance = vaultPocket?.balance()
         val heartbeat = vaultPocket?.heartbeat()
         val labels = labels()
+        val health = health()
         _state.update {
             it.copy(
                 balance = balance,

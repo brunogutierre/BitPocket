@@ -64,6 +64,9 @@ data object DuressSettings : NavKey
 @Serializable
 data object ServerSettings : NavKey
 
+@Serializable
+data object Health : NavKey
+
 /** Coin control for the Spending pocket, or the Vault when [vault]. */
 @Serializable
 data class Coins(
