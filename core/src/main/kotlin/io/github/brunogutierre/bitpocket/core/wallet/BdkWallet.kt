@@ -9,6 +9,7 @@ import io.github.brunogutierre.bitpocket.core.send.SpendException
 import io.github.brunogutierre.bitpocket.core.send.SpendPlan
 import io.github.brunogutierre.bitpocket.core.send.SpendRequest
 import io.github.brunogutierre.bitpocket.core.send.SpendingStats
+import io.github.brunogutierre.bitpocket.core.vault.Heartbeat
 import io.github.brunogutierre.bitpocket.core.vault.VaultConfig
 import io.github.brunogutierre.bitpocket.core.vault.VaultGuard
 import io.github.brunogutierre.bitpocket.core.vault.VaultKeys
@@ -278,6 +279,20 @@ class BdkWallet internal constructor(
                 if (!finalized) throw SpendException(SpendError.SIGNING_FAILED)
                 broadcastSigned(psbt, plan) { tx -> VaultGuard.checkTwoOfTwo(tx, config.timelock.blocks) }
             }
+        }
+
+    override suspend fun heartbeat(): Heartbeat =
+        onWallet {
+            val config = checkNotNull(vault) { "Not a Vault pocket" }
+            val heights =
+                wallet.listUnspent().map { utxo ->
+                    (utxo.chainPosition as? ChainPosition.Confirmed)
+                        ?.confirmationBlockTime
+                        ?.blockId
+                        ?.height
+                        ?.toInt()
+                }
+            Heartbeat.of(wallet.latestCheckpoint().height.toInt(), heights, config.timelock.blocks)
         }
 
     /** Extracts, checks against the plan (and [check]), broadcasts and records a signed PSBT. */

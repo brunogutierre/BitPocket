@@ -8,6 +8,8 @@ import io.github.brunogutierre.bitpocket.core.send.SpendException
 import io.github.brunogutierre.bitpocket.core.send.SpendRequest
 import io.github.brunogutierre.bitpocket.core.testing.ChainFixtures
 import io.github.brunogutierre.bitpocket.core.testing.Funding
+import io.github.brunogutierre.bitpocket.core.vault.Heartbeat
+import io.github.brunogutierre.bitpocket.core.vault.HeartbeatStatus
 import io.github.brunogutierre.bitpocket.core.vault.HeirTimelock
 import io.github.brunogutierre.bitpocket.core.vault.VaultConfig
 import io.github.brunogutierre.bitpocket.core.vault.VaultGuard
@@ -92,6 +94,13 @@ class VaultSendTest {
             assertEquals(1, max.inputCount)
             assertEquals(20_000, max.totalSats)
             wallet.sendFromVault(max, phone, recovery)
+        }
+
+    @Test
+    fun `the heartbeat counts from the oldest confirmed coin at the synced tip`() =
+        runTest {
+            // Confirmed at 100, tip 105: 6 confirmations of a one-year timelock.
+            assertEquals(Heartbeat(HeartbeatStatus.OK, HeirTimelock.YEAR.blocks - 6), vault(confirmed = 1_000, pending = 500).heartbeat())
         }
 
     @Test

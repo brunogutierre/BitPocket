@@ -6,6 +6,7 @@ import io.github.brunogutierre.bitpocket.core.send.SpendPlan
 import io.github.brunogutierre.bitpocket.core.send.SpendPort
 import io.github.brunogutierre.bitpocket.core.send.SpendRequest
 import io.github.brunogutierre.bitpocket.core.send.SpendingStats
+import io.github.brunogutierre.bitpocket.core.vault.Heartbeat
 
 /** Balance of a pocket, in satoshis. */
 data class Balance(
@@ -78,6 +79,9 @@ interface VaultPort {
         phoneSeed: ByteArray,
         recoverySeed: ByteArray,
     ): String
+
+    /** How close the oldest Vault coin is to the heir timelock, at the synced tip (ADR 0008). */
+    suspend fun heartbeat(): Heartbeat
 }
 
 /** The Vault pocket (the BDK wallet implements both; only Vault pockets accept Vault spends). */
