@@ -67,6 +67,7 @@ A layered-security Bitcoin wallet for Android, built as a study project.
 | Heartbeat shown in the app (no background job); refresh = 2-of-2 self-transfer | A background task cannot open the encrypted wallet and would reveal the real wallet next to a decoy | [ADR 0008](docs/adr/0008-heartbeat-and-heir-claim.md) |
 | Duress PIN opens a decoy wallet in slot B; the app never knows the slot | Coercion resistance without a PIN oracle; CI guards the slot boundary | [ADR 0009](docs/adr/0009-duress-pin-and-decoy-wallet.md) |
 | Custom Esplora server only (no Electrum), https + genesis check | One backend to maintain; refuses other networks | [ADR 0010](docs/adr/0010-custom-server-esplora-only.md) |
+| Frozen coins = BDK locked outpoints; labels = one BIP329 JSONL file per wallet | No extra database; the storage format is the export format | [ADR 0011](docs/adr/0011-coin-control-and-labels-storage.md) |
 | Manual DI (`AppContainer`) | ~20 classes do not need a framework | — |
 | QR codes with zxing `core`, uppercase BIP21 | Pure Java (JVM-tested, no Play Services); alphanumeric mode makes smaller codes | — |
 | QR scanning with CameraX (`camera-compose`) + zxing | Open source, no Play Services; decoding is JVM-tested in `:core` | — |
@@ -108,7 +109,7 @@ on every pull request and push to `main`.
 - [x] M3 — Vault: miniscript 2-of-2 with offline recovery key, encrypted descriptor backup
 - [x] M4 — Inheritance: heir timelock path and heartbeat refresh
 - [x] M5 — Duress PIN and decoy wallet
-- [ ] M6 — Privacy: custom server, coin control, BIP329 labels
+- [x] M6 — Privacy: custom server, coin control, BIP329 labels
 - [ ] M7 — Security health score and final documentation
 
 ## License
