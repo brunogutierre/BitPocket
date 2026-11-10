@@ -53,6 +53,7 @@ fun HomeScreen(
     onSettings: () -> Unit,
     onVault: () -> Unit,
     onSetUpVault: () -> Unit,
+    onHealth: () -> Unit,
     onTransaction: (txid: String) -> Unit,
     onLocked: () -> Unit,
 ) {
@@ -91,6 +92,18 @@ fun HomeScreen(
                     }
                 }
                 item { VaultCard(state.vaultBalance, onVault, onSetUpVault) }
+                state.health?.let { report ->
+                    item {
+                        ListItem(
+                            headlineContent = { Text(stringResource(R.string.health_title)) },
+                            supportingContent = { Text(stringResource(R.string.health_grade, report.grade.name, report.score)) },
+                            modifier =
+                                Modifier
+                                    .background(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.shapes.medium)
+                                    .clickable(onClick = onHealth),
+                        )
+                    }
+                }
                 state.vaultHeartbeat?.takeIf { it.status != HeartbeatStatus.OK }?.let { heartbeat ->
                     item { HeartbeatNotice(heartbeat, onRefresh = onVault) }
                 }

@@ -306,5 +306,17 @@
     <string name="labels_import">Import labels</string>
     <string name="labels_import_body">From a BIP329 file; coins marked unspendable get frozen.</string>
     <string name="labels_imported" tools:ignore="PluralsCandidate">Imported %1$d labels, skipped %2$d, froze %3$d coins.</string>
+    <string name="health_title">Security check</string>
+    <string name="health_grade" tools:ignore="PluralsCandidate">Grade %1$s · %2$d/100</string>
+    <string name="health_body">What BitPocket can check about your setup. Keeping your recovery words on paper, offline, is up to you.</string>
+    <string name="health_ok" tools:ignore="PluralsCandidate">Done · %1$d points</string>
+    <string name="health_fix" tools:ignore="PluralsCandidate">Tap to fix · %1$d points</string>
+    <string name="health_biometric">Sign with fingerprint</string>
+    <string name="health_auto_lock">Lock within a minute</string>
+    <string name="health_limit">Set a spending limit</string>
+    <string name="health_vault">Keep larger amounts in the Vault</string>
+    <string name="health_heartbeat">Keep the Vault refreshed</string>
+    <string name="health_server">Use your own server</string>
+    <string name="health_duress">Set up a duress PIN</string>
     <string name="pin_too_weak">PIN too easy to guess. Choose another one.</string>
 </resources>

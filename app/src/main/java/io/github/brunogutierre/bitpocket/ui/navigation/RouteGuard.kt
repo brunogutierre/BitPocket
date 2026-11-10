@@ -15,7 +15,7 @@ fun guardRoute(
 ): NavKey {
     val home = if (walletExists) Lock else Welcome
     return when (route) {
-        Home, Settings, ChangePin, GuardrailsSettings, DuressSettings, ServerSettings, VaultHome -> if (unlocked) route else home
+        Home, Settings, ChangePin, GuardrailsSettings, DuressSettings, ServerSettings, Health, VaultHome -> if (unlocked) route else home
         ClaimInheritance -> route
         is Receive, is Send, is TransactionDetails, is VaultSetup, is Coins -> if (unlocked) route else home
         Lock -> if (walletExists) Lock else Welcome

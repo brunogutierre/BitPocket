@@ -16,8 +16,11 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
+import io.github.brunogutierre.bitpocket.core.health.HealthCheck
 import io.github.brunogutierre.bitpocket.core.session.LaunchState
 import io.github.brunogutierre.bitpocket.di.AppContainer
+import io.github.brunogutierre.bitpocket.health.HealthViewModel
+import io.github.brunogutierre.bitpocket.health.healthReport
 import io.github.brunogutierre.bitpocket.history.TransactionDetailsViewModel
 import io.github.brunogutierre.bitpocket.home.HomeViewModel
 import io.github.brunogutierre.bitpocket.lock.LockViewModel
@@ -35,6 +38,7 @@ import io.github.brunogutierre.bitpocket.settings.GuardrailsViewModel
 import io.github.brunogutierre.bitpocket.settings.ServerViewModel
 import io.github.brunogutierre.bitpocket.settings.SettingsViewModel
 import io.github.brunogutierre.bitpocket.ui.components.SecureScreen
+import io.github.brunogutierre.bitpocket.ui.health.HealthScreen
 import io.github.brunogutierre.bitpocket.ui.history.TransactionDetailsScreen
 import io.github.brunogutierre.bitpocket.ui.home.HomeScreen
 import io.github.brunogutierre.bitpocket.ui.lock.LockScreen
@@ -174,12 +178,14 @@ fun BitPocketNavHost(
                                     container.session::lock,
                                     vault = { container.session.wallet?.vault },
                                     labels = { container.labels()?.transactionLabels().orEmpty() },
+                                    health = { healthReport(container.session) },
                                 )
                             },
                             onReceive = { backStack.add(Receive()) },
                             onSend = { backStack.add(Send()) },
                             onVault = { backStack.add(VaultHome) },
                             onSetUpVault = { backStack.add(VaultSetup(importing = false)) },
+                            onHealth = { backStack.add(Health) },
                             onSettings = { backStack.add(Settings) },
                             onTransaction = { txid -> backStack.add(TransactionDetails(txid)) },
                             onLocked = { resetTo(Lock) },
@@ -301,6 +307,20 @@ fun BitPocketNavHost(
                     val wallet = container.session.wallet
                     val pocket = if (route.vault) wallet?.vault else wallet?.spending
                     if (pocket != null) CoinsScreen(viewModel { CoinsViewModel(pocket) }, onBack = back)
+                }
+                entry<Health> {
+                    HealthScreen(viewModel { HealthViewModel(container.session) }, onBack = back) { check ->
+                        backStack.add(
+                            when (check) {
+                                HealthCheck.SPENDING_LIMIT -> GuardrailsSettings
+                                HealthCheck.VAULT -> VaultSetup(importing = false)
+                                HealthCheck.VAULT_HEARTBEAT -> VaultHome
+                                HealthCheck.OWN_SERVER -> ServerSettings
+                                HealthCheck.DURESS_PIN -> DuressSettings
+                                HealthCheck.BIOMETRIC_SIGNING, HealthCheck.QUICK_AUTO_LOCK -> Settings
+                            },
+                        )
+                    }
                 }
                 entry<ChangePin> {
                     ChangePinScreen(viewModel { ChangePinViewModel(container.walletAccess) }, onBack = back, onChanged = back)
