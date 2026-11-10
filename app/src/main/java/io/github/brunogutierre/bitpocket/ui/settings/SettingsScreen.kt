@@ -58,6 +58,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onChangePin: () -> Unit,
     onGuardrails: () -> Unit,
+    onDuress: () -> Unit,
     onSetUpVault: () -> Unit,
     onImportVault: () -> Unit,
     onClaimInheritance: () -> Unit,
@@ -86,6 +87,7 @@ fun SettingsScreen(
                 onBack,
                 onChangePin,
                 onGuardrails,
+                onDuress,
                 VaultActions(onSetUpVault, onImportVault, vaultBackup, onClaimInheritance),
                 onLock,
             )
@@ -100,6 +102,7 @@ private fun SettingsList(
     onBack: () -> Unit,
     onChangePin: () -> Unit,
     onGuardrails: () -> Unit,
+    onDuress: () -> Unit,
     vault: VaultActions,
     onLock: () -> Unit,
 ) {
@@ -137,6 +140,7 @@ private fun SettingsList(
                 },
             )
             Entry(stringResource(R.string.guardrails_title), stringResource(R.string.settings_guardrails_body), onGuardrails)
+            Entry(stringResource(R.string.duress_title), stringResource(R.string.settings_duress_body), onDuress)
             Entry(stringResource(R.string.settings_auto_lock), stringResource(state.autoLock.label()), viewModel::openAutoLock)
             Entry(
                 stringResource(R.string.settings_show_phrase),

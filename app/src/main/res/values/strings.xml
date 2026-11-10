@@ -260,5 +260,21 @@
     <string name="heir_error_not_heir">These words are not the heir words of this Vault.</string>
     <string name="heir_error_words">These are not 12 valid recovery words.</string>
     <string name="heir_error_nothing">No coin has waited long enough yet.</string>
+    <string name="duress_title">Duress PIN</string>
+    <string name="settings_duress_body">A second PIN that opens a decoy wallet.</string>
+    <string name="duress_intro">If someone forces you to unlock BitPocket, enter the duress PIN instead: it opens a separate decoy wallet with its own coins. Nothing in the app shows that another wallet exists.</string>
+    <string name="duress_limits_title">Make the decoy believable</string>
+    <string name="duress_limits_body">After setting it up, unlock with the duress PIN and receive some test coins, so the decoy looks used. It protects against someone watching you, not against a forensic examination of the phone.</string>
+    <string name="duress_status_on">Duress PIN is on.</string>
+    <string name="duress_status_off">Duress PIN is off.</string>
+    <string name="duress_set_up">Set up a duress PIN</string>
+    <string name="duress_remove">Remove the duress PIN</string>
+    <string name="duress_pin_body">Enter your PIN first.</string>
+    <string name="duress_pin_remove">Enter your PIN to remove the duress PIN and its decoy wallet.</string>
+    <string name="duress_choose_title">Choose the duress PIN</string>
+    <string name="duress_choose_body">6 digits, different from your PIN.</string>
+    <string name="duress_same_pin">The duress PIN must differ from your PIN.</string>
+    <string name="duress_done_on">The duress PIN now opens a decoy wallet. Lock, unlock with it, and fund the decoy.</string>
+    <string name="duress_done_off">The duress PIN and its decoy wallet are gone.</string>
     <string name="pin_too_weak">PIN too easy to guess. Choose another one.</string>
 </resources>
