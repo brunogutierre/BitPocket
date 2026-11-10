@@ -43,6 +43,15 @@ class SlotStore(
         }
     }
 
+    /**
+     * Replaces [slot] with a fresh random decoy (same size and layout as a real slot), re-wrapping
+     * the other one, so removing a wallet leaves exactly the same files as never having one.
+     */
+    fun reset(slot: SlotId) {
+        val sealed = SlotId.entries.associateWith { if (it == slot) wrap(decoy()) else rewrap(it) }
+        SlotId.entries.forEach { storage.write(it, sealed.getValue(it)) }
+    }
+
     /** The slot file, or null if missing, not wrapped by this device, or malformed. */
     fun read(slot: SlotId): SlotFile? {
         val plain = storage.read(slot)?.let(::unwrapOrNull) ?: return null
