@@ -1,5 +1,6 @@
 package io.github.brunogutierre.bitpocket.core.settings
 
+import io.github.brunogutierre.bitpocket.core.vault.VaultConfig
 import java.nio.ByteBuffer
 
 /** How long BitPocket may stay in the background before it locks. Ids are stored: never reuse. */
@@ -30,6 +31,8 @@ data class WalletSettings(
     val guardrails: Guardrails = Guardrails(),
     /** A loosening of [guardrails] waiting for its activation height (ADR 0006). */
     val scheduledGuardrails: ScheduledGuardrails? = null,
+    /** The Vault pocket's public keys and timelock, once set up (ADR 0007). */
+    val vault: VaultConfig? = null,
 ) {
     /**
      * Tag-length-value records: `tag (1) | length (2) | value`. Unknown tags are skipped when
@@ -40,13 +43,15 @@ data class WalletSettings(
             scheduledGuardrails?.let {
                 record(TAG_SCHEDULED_GUARDRAILS, it.guardrails.encode() + ByteBuffer.allocate(4).putInt(it.activatesAtHeight).array())
             } ?: ByteArray(0)
-        return record(TAG_AUTO_LOCK, byteArrayOf(autoLock.id)) + record(TAG_GUARDRAILS, guardrails.encode()) + scheduled
+        val vaultRecord = vault?.let { record(TAG_VAULT, it.encode()) } ?: ByteArray(0)
+        return record(TAG_AUTO_LOCK, byteArrayOf(autoLock.id)) + record(TAG_GUARDRAILS, guardrails.encode()) + scheduled + vaultRecord
     }
 
     companion object {
         private const val TAG_AUTO_LOCK: Byte = 1
         private const val TAG_GUARDRAILS: Byte = 2
         private const val TAG_SCHEDULED_GUARDRAILS: Byte = 3
+        private const val TAG_VAULT: Byte = 4
 
         /** @throws IllegalArgumentException for malformed records or values. */
         fun decode(bytes: ByteArray): WalletSettings {
@@ -72,6 +77,10 @@ data class WalletSettings(
                                 require(value.size == Guardrails.ENCODED_SIZE + 4) { "Bad scheduled guardrails record" }
                                 val buffer = ByteBuffer.wrap(value)
                                 settings.copy(scheduledGuardrails = ScheduledGuardrails(Guardrails.decode(buffer), buffer.int))
+                            }
+
+                            TAG_VAULT -> {
+                                settings.copy(vault = VaultConfig.decode(value))
                             }
 
                             else -> {
