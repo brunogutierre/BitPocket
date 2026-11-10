@@ -28,6 +28,7 @@ class LiveSignetTest {
                 wallet.sync()
                 // A fresh random wallet has no history (the public "abandon ... about" one has too much).
                 assertEquals(Balance(0, 0), wallet.balance())
+                assertEquals(ServerCheck.OK, EsploraServer.check(network.esploraBaseUrl, network) { EsploraChainClient(it) })
                 val fees = wallet.feeRates()
                 assertTrue(fees.fast >= fees.normal && fees.normal >= fees.slow && fees.slow >= 1, fees.toString())
             }
