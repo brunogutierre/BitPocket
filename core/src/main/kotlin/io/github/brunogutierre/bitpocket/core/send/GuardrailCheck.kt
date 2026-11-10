@@ -2,7 +2,7 @@ package io.github.brunogutierre.bitpocket.core.send
 
 import io.github.brunogutierre.bitpocket.core.settings.Guardrails
 
-/** What the guardrails need to know about the wallet's recent spending. */
+/** What the send checks need to know about the wallet's recent spending and addresses. */
 data class SpendingStats(
     val tipHeight: Int,
     /** Sent (fees included) by pending transactions and those confirmed in the last window. */
@@ -10,11 +10,19 @@ data class SpendingStats(
     /** Addresses this wallet has paid before. */
     val pastRecipients: Set<String>,
     val balanceSats: Long,
+    /** This wallet's revealed receive addresses. */
+    val ownAddresses: Set<String> = emptySet(),
 )
 
 enum class BlockReason { PER_TX_LIMIT, WINDOW_LIMIT }
 
-enum class ConfirmReason { NEW_RECIPIENT, LARGE_SHARE }
+enum class ConfirmReason {
+    NEW_RECIPIENT,
+    LARGE_SHARE,
+
+    /** The recipient looks like a known address without being it (possible address poisoning). */
+    LOOKALIKE,
+}
 
 sealed interface GuardrailVerdict {
     data object Allowed : GuardrailVerdict
@@ -48,6 +56,8 @@ object GuardrailCheck {
             buildSet {
                 if (guardrails.confirmNewRecipients && plan.recipient !in stats.pastRecipients) add(ConfirmReason.NEW_RECIPIENT)
                 if (guardrails.confirmLargeShare && plan.totalSats * 2 > stats.balanceSats) add(ConfirmReason.LARGE_SHARE)
+                // Always on: not a guardrail the user can turn off.
+                if (Lookalike.find(plan.recipient, stats.pastRecipients + stats.ownAddresses) != null) add(ConfirmReason.LOOKALIKE)
             }
         return if (reasons.isEmpty()) GuardrailVerdict.Allowed else GuardrailVerdict.NeedsConfirmation(reasons)
     }

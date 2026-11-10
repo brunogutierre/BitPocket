@@ -13,6 +13,7 @@ import io.github.brunogutierre.bitpocket.core.send.ConfirmReason
 import io.github.brunogutierre.bitpocket.core.send.FeeOptions
 import io.github.brunogutierre.bitpocket.core.send.GuardrailCheck
 import io.github.brunogutierre.bitpocket.core.send.GuardrailVerdict
+import io.github.brunogutierre.bitpocket.core.send.Lookalike
 import io.github.brunogutierre.bitpocket.core.send.RecipientError
 import io.github.brunogutierre.bitpocket.core.send.RecipientParser
 import io.github.brunogutierre.bitpocket.core.send.RecipientResult
@@ -43,6 +44,9 @@ enum class FeeSpeed { FAST, NORMAL, SLOW }
 
 enum class SendStage {
     EDIT,
+
+    /** The camera looks for a QR code with an address or bitcoin: link. */
+    SCAN,
     REVIEW,
 
     /** The screen shows BiometricPrompt and reports back through [SendViewModel.onBiometricResult]. */
@@ -69,6 +73,8 @@ data class SendUiState(
     val guardrail: GuardrailVerdict = GuardrailVerdict.Allowed,
     /** Confirmations the user ticked on Review. */
     val acknowledged: Set<ConfirmReason> = emptySet(),
+    /** The known address the recipient looks like, when it is a possible poisoning address. */
+    val lookalikeOf: String? = null,
     val pinEntered: Int = 0,
     val pinVerifying: Boolean = false,
     val wrongPin: Boolean = false,
@@ -153,6 +159,17 @@ class SendViewModel(
         }
     }
 
+    fun startScan() = _state.update { it.copy(stage = SendStage.SCAN) }
+
+    fun cancelScan() = _state.update { it.copy(stage = SendStage.EDIT) }
+
+    /** A scanned QR fills the recipient (and an empty amount, for a BIP21 link with one). */
+    fun onScanned(text: String) {
+        if (_state.value.stage != SendStage.SCAN) return
+        _state.update { it.copy(stage = SendStage.EDIT) }
+        onAddressChange(text)
+    }
+
     fun onAmountChange(text: String) = _state.update { it.copy(amountText = text, amountError = null, spendError = null) }
 
     fun onSendMaxChange(max: Boolean) = _state.update { it.copy(sendMax = max, amountError = null, spendError = null) }
@@ -179,8 +196,16 @@ class SendViewModel(
                 val plan = pocket.planSpend(SpendRequest(address, sendAmount, feeRate))
                 val stats = pocket.spendingStats(Guardrails.WINDOW_BLOCKS)
                 val verdict = GuardrailCheck.evaluate(GuardrailsPolicy.effective(settings, stats.tipHeight), plan, stats)
+                val lookalike = Lookalike.find(plan.recipient, stats.pastRecipients + stats.ownAddresses)
                 _state.update {
-                    it.copy(planning = false, plan = plan, guardrail = verdict, acknowledged = emptySet(), stage = SendStage.REVIEW)
+                    it.copy(
+                        planning = false,
+                        plan = plan,
+                        guardrail = verdict,
+                        lookalikeOf = lookalike,
+                        acknowledged = emptySet(),
+                        stage = SendStage.REVIEW,
+                    )
                 }
             } catch (e: SpendException) {
                 _state.update { it.copy(planning = false, spendError = e.error) }

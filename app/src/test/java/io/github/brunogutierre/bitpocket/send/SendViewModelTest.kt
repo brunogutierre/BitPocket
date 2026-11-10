@@ -253,7 +253,45 @@ class SendViewModelTest {
         assertEquals(SendStage.AUTH_BIOMETRIC, vm.state.value.stage)
     }
 
+    @Test
+    fun `a recipient that looks like an own address must be confirmed`() {
+        val own = "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx"
+        pocket.stats = pocket.stats.copy(pastRecipients = setOf(LOOKALIKE), ownAddresses = setOf(own))
+        pocket.plans += plan.copy(recipient = LOOKALIKE)
+        val vm = SendViewModel(pocket)
+        vm.onAddressChange(LOOKALIKE)
+        vm.onAmountChange("10000")
+
+        vm.review()
+
+        assertEquals(own, vm.state.value.lookalikeOf)
+        assertEquals(GuardrailVerdict.NeedsConfirmation(setOf(ConfirmReason.LOOKALIKE)), vm.state.value.guardrail)
+        assertFalse(vm.state.value.canConfirm)
+    }
+
+    @Test
+    fun `a scanned BIP21 link fills recipient and amount, and cancelling keeps the form`() {
+        val vm = SendViewModel(pocket)
+        vm.onScanned("ignored outside the scanner")
+        assertEquals("", vm.state.value.addressText)
+
+        vm.startScan()
+        assertEquals(SendStage.SCAN, vm.state.value.stage)
+        vm.cancelScan()
+        assertEquals(SendStage.EDIT, vm.state.value.stage)
+
+        vm.startScan()
+        vm.onScanned("bitcoin:$ADDRESS?amount=0.0005")
+        assertEquals(SendStage.EDIT, vm.state.value.stage)
+        assertEquals("bitcoin:$ADDRESS?amount=0.0005", vm.state.value.addressText)
+        assertEquals("50000", vm.state.value.amountText)
+    }
+
     private companion object {
         const val ADDRESS = "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx"
+
+        // A valid testnet P2WPKH address with the same "qw50" start and "jzsx" end as ADDRESS,
+        // found by brute force in ~4 million tries: what a poisoning address looks like.
+        const val LOOKALIKE = "tb1qw50vy30pdhwf3xn46m0u2auv3d7gm5fdhnjzsx"
     }
 }

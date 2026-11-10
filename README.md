@@ -65,6 +65,8 @@ A layered-security Bitcoin wallet for Android, built as a study project.
 | Watch-only wallets + short-lived signers, Esplora sync | Keys never persisted by BDK; no background access | [ADR 0004](docs/adr/0004-watch-only-wallets-and-esplora-sync.md) |
 | Manual DI (`AppContainer`) | ~20 classes do not need a framework | — |
 | QR codes with zxing `core`, uppercase BIP21 | Pure Java (JVM-tested, no Play Services); alphanumeric mode makes smaller codes | — |
+| QR scanning with CameraX (`camera-compose`) + zxing | Open source, no Play Services; decoding is JVM-tested in `:core` | — |
+| Look-alike recipient warning (always on); paste only on tap; copied address cleared after 60 s | Address poisoning and clipboard hijacking target what people actually compare and copy | — |
 | Guardrails: tighten now, loosen after 144 blocks | Someone holding the unlocked phone cannot raise a limit and spend at once; block height cannot be faked like the clock | [ADR 0006](docs/adr/0006-guardrails-anchored-to-block-height.md) |
 | Address fingerprint: 3 BIP39 words + mirrored identicon from SHA-256 | ~57 bits a human can compare by eye or voice; the scheme is frozen by a test vector | — |
 | At most 10 unused receive addresses | A restore scans until 20 unused in a row (stop gap) | — |
@@ -97,7 +99,7 @@ on every pull request and push to `main`.
 
 - [x] M0 — Bootstrap: build, CI, coverage, `:core` module and BDK de-risking spikes
 - [x] M1 — Spending wallet: encrypted storage, PIN, onboarding, sync, receive, send with biometrics, history, auto-lock
-- [ ] M2 — Safety UX: address fingerprint, guardrails, clipboard/poisoning warnings
+- [x] M2 — Safety UX: address fingerprint, guardrails, clipboard/poisoning warnings
 - [ ] M3 — Vault: miniscript 2-of-2 with offline recovery key, encrypted descriptor backup
 - [ ] M4 — Inheritance: heir timelock path and heartbeat refresh
 - [ ] M5 — Duress PIN and decoy wallet

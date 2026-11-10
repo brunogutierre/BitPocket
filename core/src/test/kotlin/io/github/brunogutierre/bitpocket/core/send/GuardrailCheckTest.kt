@@ -38,6 +38,17 @@ class GuardrailCheckTest {
     }
 
     @Test
+    fun `always asks to confirm a recipient that looks like a known address`() {
+        val known = "tb1p8wpt9v4frpf3tkn0srd97pksgsxc5hs52lafxwru9kgeephvs7rqlqt9zj"
+        val poisoned = plan.copy(recipient = "tb1p8wptqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqt9zj")
+        val noConfirmations = Guardrails(confirmNewRecipients = false, confirmLargeShare = false)
+
+        val verdict = GuardrailCheck.evaluate(noConfirmations, poisoned, stats.copy(ownAddresses = setOf(known)))
+
+        assertEquals(GuardrailVerdict.NeedsConfirmation(setOf(ConfirmReason.LOOKALIKE)), verdict)
+    }
+
+    @Test
     fun `asks to confirm a new recipient and a spend over half the balance`() {
         val verdict = GuardrailCheck.evaluate(Guardrails(), plan, stats.copy(pastRecipients = emptySet(), balanceSats = 19_999))
 

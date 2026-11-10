@@ -5,6 +5,8 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.widget.Toast
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -145,7 +147,12 @@ private fun copy(
     address: String,
 ) {
     val clipboard = context.getSystemService(ClipboardManager::class.java)
-    clipboard.setPrimaryClip(ClipData.newPlainText(context.getString(R.string.receive_clip_label), address))
+    val label = context.getString(R.string.receive_clip_label)
+    clipboard.setPrimaryClip(ClipData.newPlainText(label, address))
+    // Leave nothing behind for clipboard-reading apps: clear it after a minute if it is still ours.
+    Handler(Looper.getMainLooper()).postDelayed({
+        if (clipboard.primaryClipDescription?.label == label) clipboard.clearPrimaryClip()
+    }, CLIPBOARD_CLEAR_MS)
     // Android 13+ shows its own confirmation for clipboard writes.
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
         Toast.makeText(context, R.string.receive_copied, Toast.LENGTH_SHORT).show()
@@ -159,3 +166,5 @@ private fun share(
     val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
     context.startActivity(Intent.createChooser(send, null))
 }
+
+private const val CLIPBOARD_CLEAR_MS = 60_000L
