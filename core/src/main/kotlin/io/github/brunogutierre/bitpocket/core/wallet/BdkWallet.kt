@@ -1,22 +1,38 @@
 package io.github.brunogutierre.bitpocket.core.wallet
 
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
+import io.github.brunogutierre.bitpocket.core.send.FeeOptions
+import io.github.brunogutierre.bitpocket.core.send.FeePolicy
+import io.github.brunogutierre.bitpocket.core.send.SendAmount
+import io.github.brunogutierre.bitpocket.core.send.SpendError
+import io.github.brunogutierre.bitpocket.core.send.SpendException
+import io.github.brunogutierre.bitpocket.core.send.SpendPlan
+import io.github.brunogutierre.bitpocket.core.send.SpendRequest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.bitcoindevkit.Address
+import org.bitcoindevkit.AddressParseException
+import org.bitcoindevkit.Amount
 import org.bitcoindevkit.ChainPosition
+import org.bitcoindevkit.CreateTxException
 import org.bitcoindevkit.Descriptor
 import org.bitcoindevkit.EsploraException
+import org.bitcoindevkit.FeeRate
 import org.bitcoindevkit.KeychainKind
 import org.bitcoindevkit.LoadWithPersistException
 import org.bitcoindevkit.PersistenceException
 import org.bitcoindevkit.Persister
+import org.bitcoindevkit.Psbt
+import org.bitcoindevkit.Script
+import org.bitcoindevkit.TxBuilder
 import org.bitcoindevkit.Txid
 import org.bitcoindevkit.Wallet
 import java.io.File
+import java.io.IOException
 
 /**
  * A watch-only BDK wallet: public descriptors only, persisted in SQLite. Private keys never reach
@@ -116,6 +132,94 @@ class BdkWallet internal constructor(
 
     @Volatile
     private var closed = false
+
+    override suspend fun feeRates(): FeeOptions =
+        onWallet {
+            try {
+                FeePolicy.fromEstimates(chain.feeEstimates())
+            } catch (e: IOException) {
+                throw ChainUnavailableException(e)
+            }
+        }
+
+    override suspend fun planSpend(request: SpendRequest): SpendPlan =
+        onWallet {
+            val recipient =
+                try {
+                    Address(request.address, network.toBdkNetwork())
+                } catch (e: AddressParseException) {
+                    throw SpendException(SpendError.INVALID_ADDRESS, e)
+                }
+            recipient.use { address ->
+                address.scriptPubkey().use { script ->
+                    val psbt = buildPsbt(script, request)
+                    psbt.use {
+                        SpendGuard.check(it, wallet)
+                        wallet.persist(persister) // building reveals a change address
+                        planOf(it, request, address.toString(), script.toBytes())
+                    }
+                }
+            }
+        }
+
+    private fun buildPsbt(
+        script: Script,
+        request: SpendRequest,
+    ): Psbt =
+        FeeRate.fromSatPerVb(request.feeRateSatPerVb.toULong()).use { rate ->
+            val base = SpendGuard.restrict(TxBuilder()).feeRate(rate)
+            val builder =
+                when (val amount = request.amount) {
+                    is SendAmount.Exact -> Amount.fromSat(amount.sats.toULong()).use { base.addRecipient(script, it) }
+                    SendAmount.Max -> base.drainWallet().drainTo(script)
+                }
+            try {
+                builder.finish(wallet)
+            } catch (e: CreateTxException) {
+                throw SpendException(spendErrorOf(e), e)
+            }
+        }
+
+    private fun planOf(
+        psbt: Psbt,
+        request: SpendRequest,
+        recipient: String,
+        recipientScript: ByteArray,
+    ): SpendPlan =
+        psbt.extractTxUncheckedFeeRate().use { tx ->
+            val outputs = tx.output()
+            val change = outputs.filter { wallet.derivationOfSpk(it.scriptPubkey)?.keychain == KeychainKind.INTERNAL }
+            SpendPlan(
+                psbtBase64 = psbt.serialize(),
+                recipient = recipient,
+                amountSats =
+                    outputs
+                        .filter {
+                            it.scriptPubkey.toBytes().contentEquals(
+                                recipientScript,
+                            )
+                        }.sumOf { it.value.toSat().toLong() },
+                feeSats = psbt.fee().toLong(),
+                feeRateSatPerVb = request.feeRateSatPerVb,
+                changeSats = change.sumOf { it.value.toSat().toLong() },
+                inputCount = tx.input().size,
+            )
+        }
+
+    private fun spendErrorOf(e: CreateTxException): SpendError =
+        when (e) {
+            is CreateTxException.InsufficientFunds, is CreateTxException.CoinSelection, is CreateTxException.NoUtxosSelected -> {
+                SpendError.INSUFFICIENT_FUNDS
+            }
+
+            is CreateTxException.OutputBelowDustLimit -> {
+                SpendError.BELOW_DUST
+            }
+
+            else -> {
+                SpendError.OTHER
+            }
+        }
 
     override fun close() {
         closed = true

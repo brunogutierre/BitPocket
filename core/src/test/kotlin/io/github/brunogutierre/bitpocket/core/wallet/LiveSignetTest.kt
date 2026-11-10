@@ -3,6 +3,7 @@ package io.github.brunogutierre.bitpocket.core.wallet
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -27,6 +28,8 @@ class LiveSignetTest {
                 wallet.sync()
                 // A fresh random wallet has no history (the public "abandon ... about" one has too much).
                 assertEquals(Balance(0, 0), wallet.balance())
+                val fees = wallet.feeRates()
+                assertTrue(fees.fast >= fees.normal && fees.normal >= fees.slow && fees.slow >= 1, fees.toString())
             }
         }
 }

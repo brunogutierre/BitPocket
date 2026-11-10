@@ -2,6 +2,7 @@ package io.github.brunogutierre.bitpocket.core.wallet
 
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
 import io.github.brunogutierre.bitpocket.core.seed.SlotPayload
+import io.github.brunogutierre.bitpocket.core.send.FeeOptions
 import io.github.brunogutierre.bitpocket.core.testing.ChainFixtures
 import io.github.brunogutierre.bitpocket.core.testing.Funding
 import kotlinx.coroutines.Dispatchers
@@ -116,6 +117,17 @@ class BdkWalletTest {
         }
 
     @Test
+    fun `fee rates come from the backend estimates`() =
+        runTest {
+            BdkWallet.open(dir, descriptors, network, chain).use { wallet ->
+                assertThrows<ChainUnavailableException> { wallet.feeRates() }
+
+                chain.estimates = mapOf(1 to 3.2, 6 to 2.0, 144 to 1.0)
+                assertEquals(FeeOptions(fast = 4, normal = 2, slow = 1), wallet.feeRates())
+            }
+        }
+
+    @Test
     fun `closing the wallet closes its chain client and stops later calls`() =
         runTest {
             val wallet = BdkWallet.open(dir, descriptors, network, chain, Dispatchers.Unconfined)
@@ -181,6 +193,10 @@ class FakeChainClient : ChainClient {
         calls += "sync"
         throw EsploraException.Minreq("offline")
     }
+
+    var estimates: Map<Int, Double>? = null
+
+    override fun feeEstimates(): Map<Int, Double> = estimates ?: throw java.io.IOException("offline")
 
     override fun close() {
         closed = true

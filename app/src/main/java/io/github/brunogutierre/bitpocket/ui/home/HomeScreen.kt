@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -41,6 +42,7 @@ import io.github.brunogutierre.bitpocket.ui.theme.screenHorizontalPadding
 fun HomeScreen(
     viewModel: HomeViewModel,
     onReceive: () -> Unit,
+    onSend: () -> Unit,
     onTransaction: (txid: String) -> Unit,
     onLocked: () -> Unit,
 ) {
@@ -62,7 +64,12 @@ fun HomeScreen(
                         WarningBanner(stringResource(R.string.home_sync_failed_title), stringResource(R.string.home_sync_failed_body))
                     }
                 }
-                item { PrimaryButton(stringResource(R.string.home_receive), onClick = onReceive) }
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                        PrimaryButton(stringResource(R.string.home_receive), onClick = onReceive, modifier = Modifier.weight(1f))
+                        PrimaryButton(stringResource(R.string.home_send), onClick = onSend, modifier = Modifier.weight(1f))
+                    }
+                }
                 item { Text(stringResource(R.string.home_activity), style = MaterialTheme.typography.titleMedium) }
                 if (state.history.isEmpty()) {
                     item {
