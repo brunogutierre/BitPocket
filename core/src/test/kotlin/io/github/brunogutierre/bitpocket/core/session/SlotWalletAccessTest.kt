@@ -12,10 +12,12 @@ import io.github.brunogutierre.bitpocket.core.crypto.SlotStore
 import io.github.brunogutierre.bitpocket.core.crypto.TEST_KDF_PARAMS
 import io.github.brunogutierre.bitpocket.core.crypto.UnlockService
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
+import io.github.brunogutierre.bitpocket.core.testing.FakeWalletOpener
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.time.Duration
@@ -24,10 +26,11 @@ class SlotWalletAccessTest {
     private val storage = InMemorySlotStorage()
     private val session = Session()
     private val entropy = ByteArray(16) { 3 }
+    private val opener = FakeWalletOpener()
 
     private fun access(keyWrapper: KeyWrapper = FakeKeyWrapper()): SlotWalletAccess {
         val slots = SlotStore(storage, Argon2idKdf, keyWrapper, TEST_KDF_PARAMS)
-        return SlotWalletAccess(slots, UnlockService(slots, InMemoryAttemptsStore(), FakeUnlockClock()), session)
+        return SlotWalletAccess(slots, UnlockService(slots, InMemoryAttemptsStore(), FakeUnlockClock()), session, opener)
     }
 
     @Test
@@ -42,6 +45,8 @@ class SlotWalletAccessTest {
         assertArrayEquals(entropy, wallet.payload.seedEntropy)
         assertNull(wallet.payload.biometricSeed)
         assertEquals(SupportedNetwork.TESTNET4, wallet.payload.network)
+        assertSame(opener.opened.single(), wallet.spending)
+        assertEquals(SupportedNetwork.TESTNET4, wallet.spending.network)
     }
 
     @Test
@@ -54,9 +59,21 @@ class SlotWalletAccessTest {
 
         assertFalse(session.isUnlocked)
         assertArrayEquals(ByteArray(16), unlockedSeed)
+        assertTrue(opener.opened.single().closed)
         assertEquals(UnlockOutcome.WrongPin(Duration.ZERO), access.unlock("000000".toCharArray()))
         assertEquals(UnlockOutcome.Unlocked, access.unlock("123456".toCharArray()))
         assertArrayEquals(entropy, session.wallet!!.payload.seedEntropy)
+    }
+
+    @Test
+    fun `a wallet database that cannot be opened fails the unlock without a PIN error`() {
+        val access = access()
+        access.create("123456".toCharArray(), entropy, SupportedNetwork.SIGNET)
+        session.lock()
+        opener.failure = IllegalStateException("disk full")
+
+        assertEquals(UnlockOutcome.Failed, access.unlock("123456".toCharArray()))
+        assertFalse(session.isUnlocked)
     }
 
     @Test

@@ -34,9 +34,36 @@ A layered-security Bitcoin wallet for Android, built as a study project.
 | Build         | Gradle 9.8 (Kotlin DSL, version catalog), AGP 9.4   |
 | Android       | minSdk 30, target/compile SDK 37                    |
 | Bitcoin       | BDK 3.1.0 (`bdk-android` in `:app`, `bdk-jvm` for `:core` tests) |
+| Chain backend | Esplora (mempool.space Signet/Testnet4)             |
+| Storage       | Encrypted slot files (Argon2id + AES-GCM + Keystore); watch-only wallets in SQLite |
 | Tests         | JUnit 6 (Jupiter), Kover (>= 80% line coverage)     |
-| Bitcoin       | Bitcoin Dev Kit (bdk-android) — *planned in M0*     |
 | Networks      | Signet (default) and Testnet4 only                  |
+
+## Architecture
+
+```
+:app  (Android)   Compose screens -> ViewModels -> AppContainer (manual DI)
+                  Keystore key wrapping, biometric seed cipher
+   |
+   v  plain Kotlin types only (PocketWallet, WalletAccess, ...)
+:core (JVM)       slots + unlock (crypto), session, BIP39, descriptors,
+                  BdkWallet (watch-only, SQLite) --ChainClient--> Esplora
+```
+
+- `:core` holds every rule that can run on the JVM and is tested there with the real BDK
+  (`bdk-jvm`); `:app` only adds Android: UI, Keystore, biometrics and wiring.
+- Secrets (seed, PIN-derived keys) live only in the encrypted slot files and, while unlocked, in
+  memory. Wallet databases are watch-only.
+
+## Decisions
+
+| Decision | Why | Record |
+|---|---|---|
+| BDK as `compileOnly` in `:core`, `bdk-jvm` in tests | Fast JVM tests of real wallet logic | [ADR 0001](docs/adr/0001-bdk-on-jvm-for-core-tests.md) |
+| Vault policy with explicit branch and guards | BDK pitfalls found in the M0 spike | [ADR 0002](docs/adr/0002-vault-policy-and-signing.md) |
+| Mainnet impossible by types, CI and tests | Unaudited study wallet | [ADR 0003](docs/adr/0003-mainnet-disabled.md) |
+| Watch-only wallets + short-lived signers, Esplora sync | Keys never persisted by BDK; no background access | [ADR 0004](docs/adr/0004-watch-only-wallets-and-esplora-sync.md) |
+| Manual DI (`AppContainer`) | ~20 classes do not need a framework | — |
 
 ## Building
 
@@ -48,6 +75,7 @@ Requirements: JDK 17+ and the Android SDK (platform 37). Point Gradle to the SDK
 ./gradlew :core:test testDebugUnitTest lint  # unit tests and lint
 ./gradlew spotlessApply                  # format Kotlin sources (ktlint)
 ./gradlew koverVerify koverHtmlReport    # coverage gate (>= 80% lines)
+./gradlew :core:test -Plive              # opt-in tests against public Signet servers (not in CI)
 adb install app/build/outputs/apk/debug/app-debug.apk
 ```
 
@@ -56,7 +84,7 @@ on every pull request and push to `main`.
 
 ## Roadmap
 
-- [ ] M0 — Bootstrap: build, CI, coverage, `:core` module and BDK de-risking spikes
+- [x] M0 — Bootstrap: build, CI, coverage, `:core` module and BDK de-risking spikes
 - [ ] M1 — Spending wallet: encrypted storage, PIN, onboarding, sync, receive, send with biometrics, history, auto-lock
 - [ ] M2 — Safety UX: address fingerprint, guardrails, clipboard/poisoning warnings
 - [ ] M3 — Vault: miniscript 2-of-2 with offline recovery key, encrypted descriptor backup

@@ -16,7 +16,19 @@ import org.bitcoindevkit.Mnemonic
 class SpendingDescriptors private constructor(
     val external: Descriptor,
     val internal: Descriptor,
-) {
+) : AutoCloseable {
+    /** The watch-only form, safe to persist. */
+    fun toPublic(): PublicDescriptors =
+        PublicDescriptors(
+            external = external.asPublic().use { it.toString() },
+            internal = internal.asPublic().use { it.toString() },
+        )
+
+    override fun close() {
+        external.close()
+        internal.close()
+    }
+
     companion object {
         fun fromMnemonic(
             mnemonic: Mnemonic,
@@ -31,5 +43,21 @@ class SpendingDescriptors private constructor(
                 )
             }
         }
+
+        /** From BIP39 [entropy], without ever building the mnemonic as a String. */
+        fun fromEntropy(
+            entropy: ByteArray,
+            network: SupportedNetwork,
+        ): SpendingDescriptors = Mnemonic.fromEntropy(entropy).use { fromMnemonic(it, network) }
+    }
+}
+
+/** Public (watch-only) descriptors of a pocket, with checksums: what wallet databases are opened with. */
+data class PublicDescriptors(
+    val external: String,
+    val internal: String,
+) {
+    init {
+        require("prv" !in external && "prv" !in internal) { "Public descriptors must not hold private keys" }
     }
 }

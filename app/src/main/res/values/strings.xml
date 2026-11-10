@@ -48,7 +48,11 @@
     <string name="lock_locked_out">Too many attempts. Try again in %1$s.</string>
     <string name="lock_failed">Could not open the wallet. Make sure the device is unlocked and try again.</string>
     <string name="home_title">Spending</string>
-    <string name="home_placeholder">Balance and activity arrive in the next milestone.</string>
+    <string name="home_balance_label">Balance</string>
+    <string name="home_balance_unknown">Balance not loaded yet</string>
+    <string name="home_pending">Includes %1$s waiting for confirmation</string>
+    <string name="home_sync_failed_title">Could not sync</string>
+    <string name="home_sync_failed_body">Showing the last saved balance. Pull down to try again.</string>
     <string name="home_lock">Lock</string>
     <string name="pin_too_weak">PIN too easy to guess. Choose another one.</string>
 </resources>

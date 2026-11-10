@@ -9,6 +9,7 @@ import io.github.brunogutierre.bitpocket.core.crypto.UnlockService
 import io.github.brunogutierre.bitpocket.core.crypto.wipe
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
 import io.github.brunogutierre.bitpocket.core.seed.SlotPayload
+import io.github.brunogutierre.bitpocket.core.wallet.WalletOpener
 import java.time.Duration
 
 sealed interface UnlockOutcome {
@@ -43,6 +44,7 @@ class SlotWalletAccess(
     private val slots: SlotStore,
     private val unlockService: UnlockService,
     private val session: Session,
+    private val opener: WalletOpener,
 ) : WalletAccess {
     override fun create(
         pin: CharArray,
@@ -57,7 +59,7 @@ class SlotWalletAccess(
         } finally {
             encoded.wipe()
         }
-        session.open(UnlockedWallet(SlotId.A, payload))
+        session.open(UnlockedWallet(SlotId.A, payload, opener.open(payload)))
     }
 
     override fun unlock(pin: CharArray): UnlockOutcome =
@@ -73,13 +75,22 @@ class SlotWalletAccess(
             UnlockOutcome.Failed
         }
 
-    private fun open(result: UnlockResult.Unlocked): UnlockOutcome =
-        try {
-            session.open(UnlockedWallet(result.slot, SlotPayload.decode(result.payload)))
+    private fun open(result: UnlockResult.Unlocked): UnlockOutcome {
+        val payload =
+            try {
+                SlotPayload.decode(result.payload)
+            } catch (e: IllegalArgumentException) {
+                return UnlockOutcome.Failed
+            } finally {
+                result.payload.wipe()
+            }
+        return try {
+            session.open(UnlockedWallet(result.slot, payload, opener.open(payload)))
             UnlockOutcome.Unlocked
-        } catch (e: IllegalArgumentException) {
+        } catch (e: Exception) {
+            // The wallet database could not be opened (I/O error): not a PIN problem.
+            payload.seedEntropy.wipe()
             UnlockOutcome.Failed
-        } finally {
-            result.payload.wipe()
         }
+    }
 }

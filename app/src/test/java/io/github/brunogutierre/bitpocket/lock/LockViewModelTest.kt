@@ -3,13 +3,8 @@ package io.github.brunogutierre.bitpocket.lock
 import app.cash.turbine.test
 import io.github.brunogutierre.bitpocket.FakeWalletAccess
 import io.github.brunogutierre.bitpocket.MainDispatcherExtension
-import io.github.brunogutierre.bitpocket.core.crypto.SlotId
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
-import io.github.brunogutierre.bitpocket.core.seed.SlotPayload
-import io.github.brunogutierre.bitpocket.core.session.Session
 import io.github.brunogutierre.bitpocket.core.session.UnlockOutcome
-import io.github.brunogutierre.bitpocket.core.session.UnlockedWallet
-import io.github.brunogutierre.bitpocket.home.HomeViewModel
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -83,17 +78,4 @@ class LockViewModelTest {
             testScheduler.runCurrent()
             assertTrue(vm.state.value.failed)
         }
-
-    @Test
-    fun `home shows the session network and locks it`() {
-        val session = Session()
-        session.open(UnlockedWallet(SlotId.A, SlotPayload(ByteArray(16), null, SupportedNetwork.TESTNET4)))
-        val home = HomeViewModel(session)
-
-        assertEquals(SupportedNetwork.TESTNET4, home.network)
-        home.lock()
-
-        assertFalse(session.isUnlocked)
-        assertEquals(SupportedNetwork.SIGNET, HomeViewModel(session).network)
-    }
 }

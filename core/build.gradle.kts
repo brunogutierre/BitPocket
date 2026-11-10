@@ -23,6 +23,8 @@ dependencies {
     compileOnly(libs.bdk.jvm)
     // Argon2id (not available in the JDK or on Android).
     implementation(libs.bouncycastle.prov)
+    // Wallet I/O (SQLite, Esplora) runs on a per-wallet serial dispatcher.
+    implementation(libs.kotlinx.coroutines.core)
 
     testImplementation(libs.bdk.jvm)
     testImplementation(libs.kotlinx.coroutines.test)
@@ -31,8 +33,11 @@ dependencies {
     testRuntimeOnly(libs.junit.platform.launcher)
 }
 
+val includeLiveTests = providers.gradleProperty("live").isPresent
+
 tasks.test {
-    useJUnitPlatform()
+    // Tests tagged "live" talk to public Signet servers: opt in with -Plive, never in CI.
+    useJUnitPlatform { if (!includeLiveTests) excludeTags("live") }
     // BDK loads its native library through JNA; recent JDKs warn unless native access is enabled.
     jvmArgs("--enable-native-access=ALL-UNNAMED")
 }

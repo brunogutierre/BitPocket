@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
 
@@ -60,6 +61,21 @@ class SpendingDescriptorsTest {
         assertFalse(secrets.contains("xprv"))
         assertTrue(addresses.all { it.startsWith("tb1p") }, addresses.toString())
         assertFalse(addresses.any { it.startsWith("bc1") })
+    }
+
+    @Test
+    fun `entropy gives the same wallet as the mnemonic, and the public form keeps only tpubs`() {
+        val fromEntropy = SpendingDescriptors.fromEntropy(ByteArray(16), SupportedNetwork.DEFAULT).use { it.toPublic() }
+        val fromMnemonic = descriptors(SupportedNetwork.DEFAULT).toPublic()
+
+        assertEquals(fromMnemonic, fromEntropy)
+        assertTrue(fromEntropy.internal.contains("tpub") && !fromEntropy.internal.contains("prv"))
+        assertThrows<IllegalArgumentException> {
+            PublicDescriptors(
+                descriptors(SupportedNetwork.DEFAULT).external.toStringWithSecret(),
+                "",
+            )
+        }
     }
 
     @Test
