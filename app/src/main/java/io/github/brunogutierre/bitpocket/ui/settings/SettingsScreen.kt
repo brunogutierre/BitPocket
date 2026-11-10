@@ -113,6 +113,16 @@ private fun SettingsList(
     onLock: () -> Unit,
 ) {
     val context = LocalContext.current
+    val exportLabels =
+        rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/jsonl")) { uri ->
+            if (uri != null) writeDocument(context, uri, viewModel.exportLabels().toByteArray(Charsets.UTF_8))
+        }
+    val importLabels =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            uri
+                ?.let { runCatching { context.contentResolver.openInputStream(it)?.use { input -> input.readBytes() } }.getOrNull() }
+                ?.let { viewModel.importLabels(it.toString(Charsets.UTF_8)) }
+        }
     val exportBackup =
         rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
             val bytes = vault.backup()
@@ -170,6 +180,22 @@ private fun SettingsList(
             SectionTitle(stringResource(R.string.settings_privacy))
             Entry(stringResource(R.string.server_title), stringResource(R.string.settings_server_body), onServer)
             Entry(stringResource(R.string.coins_title), stringResource(R.string.settings_coins_body), onCoins)
+            Entry(
+                stringResource(R.string.labels_export),
+                stringResource(R.string.labels_export_body),
+                { exportLabels.launch(LABELS_FILE_NAME) },
+            )
+            Entry(
+                stringResource(R.string.labels_import),
+                stringResource(R.string.labels_import_body),
+                { importLabels.launch(arrayOf("*/*")) },
+            )
+            state.labelImport?.let { result ->
+                Text(
+                    stringResource(R.string.labels_imported, result.added, result.skipped, result.frozen.size),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
             HorizontalDivider()
             SectionTitle(stringResource(R.string.settings_about))
             ListItem(
@@ -326,3 +352,6 @@ class VaultActions(
     val backup: () -> ByteArray?,
     val claimInheritance: () -> Unit,
 )
+
+/** BIP329 files are JSON Lines. */
+private const val LABELS_FILE_NAME = "bitpocket-labels.jsonl"

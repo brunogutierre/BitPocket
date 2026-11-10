@@ -23,6 +23,7 @@ import java.time.format.FormatStyle
 fun TransactionRow(
     item: HistoryItem,
     modifier: Modifier = Modifier,
+    label: String? = null,
 ) {
     val incoming = item.netSats > 0
     ListItem(
@@ -33,7 +34,7 @@ fun TransactionRow(
                 color = if (incoming) MaterialTheme.extendedColors.success else Color.Unspecified,
             )
         },
-        overlineContent = { Text(stringResource(if (incoming) R.string.history_received else R.string.history_sent)) },
+        overlineContent = { Text(label ?: stringResource(if (incoming) R.string.history_received else R.string.history_sent)) },
         supportingContent = { Text(statusText(item)) },
         modifier = modifier,
     )
