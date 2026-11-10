@@ -106,7 +106,7 @@ on every pull request and push to `main`.
 - [x] M2 — Safety UX: address fingerprint, guardrails, clipboard/poisoning warnings
 - [x] M3 — Vault: miniscript 2-of-2 with offline recovery key, encrypted descriptor backup
 - [x] M4 — Inheritance: heir timelock path and heartbeat refresh
-- [ ] M5 — Duress PIN and decoy wallet
+- [x] M5 — Duress PIN and decoy wallet
 - [ ] M6 — Privacy: custom server, coin control, BIP329 labels
 - [ ] M7 — Security health score and final documentation
 

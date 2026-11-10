@@ -157,6 +157,20 @@ class SettingsViewModelTest {
         assertNull(vm.state.value.action)
     }
 
+    @Test
+    fun `the real and the decoy session look exactly the same to the UI`() {
+        val settings =
+            io.github.brunogutierre.bitpocket.core.settings
+                .WalletSettings()
+
+        fun stateFor(slot: SlotId): SettingsUiState {
+            val session = Session().apply { open(UnlockedWallet(slot, SupportedNetwork.SIGNET, null, FakePocketWallet(), settings)) }
+            return SettingsViewModel(access, session, true, {}, main.dispatcher).state.value
+        }
+
+        assertEquals(stateFor(SlotId.A), stateFor(SlotId.B))
+    }
+
     private class RecordingVault : BiometricSeedVault {
         var sealed = false
 

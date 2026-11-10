@@ -58,6 +58,9 @@ data object ChangePin : NavKey
 @Serializable
 data object GuardrailsSettings : NavKey
 
+@Serializable
+data object DuressSettings : NavKey
+
 /** Vault setup wizard, or import of a backup when [importing]. */
 @Serializable
 data class VaultSetup(
