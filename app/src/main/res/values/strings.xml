@@ -136,6 +136,12 @@
     <string name="settings_biometric_prompt">Turn on fingerprint signing</string>
     <string name="settings_biometric_failed_title">Fingerprint signing is off</string>
     <string name="settings_biometric_failed_body">The fingerprint check was cancelled or failed. Try again when you are ready.</string>
+    <string name="settings_auto_lock">Auto-lock</string>
+    <string name="settings_pin_auto_lock">Enter your PIN to change when BitPocket locks.</string>
+    <string name="auto_lock_immediately">As soon as you leave the app</string>
+    <string name="auto_lock_30s">After 30 seconds in the background</string>
+    <string name="auto_lock_1min">After 1 minute in the background</string>
+    <string name="auto_lock_5min">After 5 minutes in the background</string>
     <string name="settings_show_phrase">Show recovery words</string>
     <string name="settings_show_phrase_body">Check your paper backup.</string>
     <string name="settings_change_pin">Change PIN</string>

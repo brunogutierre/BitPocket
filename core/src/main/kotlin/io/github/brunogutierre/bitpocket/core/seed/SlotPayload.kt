@@ -1,6 +1,7 @@
 package io.github.brunogutierre.bitpocket.core.seed
 
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
+import io.github.brunogutierre.bitpocket.core.settings.WalletSettings
 import java.nio.ByteBuffer
 
 /**
@@ -9,37 +10,46 @@ import java.nio.ByteBuffer
  * - [seedEntropy]: BIP39 entropy, the PIN-fallback copy of the seed.
  * - [biometricSeed]: the same entropy encrypted with the biometric-bound Keystore key, or null
  *   if biometrics are not set up. Signing normally uses this copy.
- * - [network]: the first wallet setting; the versioned format leaves room for more.
+ * - [network]: the wallet network.
+ * - [settings]: security settings (ADR 0005).
  *
- * Format: `version (1) | network id (1) | entropy length (1) | entropy | blob length (2) | blob`.
+ * Format v2: `version (1) | network id (1) | entropy length (1) | entropy | blob length (2) | blob |
+ * settings length (2) | settings records`. Version 1 (no settings section) decodes with defaults.
  */
 class SlotPayload(
     val seedEntropy: ByteArray,
     val biometricSeed: ByteArray?,
     val network: SupportedNetwork,
+    val settings: WalletSettings = WalletSettings(),
 ) {
     init {
         require(seedEntropy.size in ENTROPY_SIZES) { "BIP39 entropy must be 16..32 bytes in steps of 4" }
         require((biometricSeed?.size ?: 0) <= MAX_BLOB_BYTES) { "biometric blob too large" }
     }
 
-    fun withBiometricSeed(blob: ByteArray?) = SlotPayload(seedEntropy, blob, network)
+    fun withBiometricSeed(blob: ByteArray?) = SlotPayload(seedEntropy, blob, network, settings)
+
+    fun withSettings(settings: WalletSettings) = SlotPayload(seedEntropy, biometricSeed, network, settings)
 
     fun encode(): ByteArray {
         val blob = biometricSeed ?: ByteArray(0)
+        val settingsBytes = settings.encode()
         return ByteBuffer
-            .allocate(1 + 1 + 1 + seedEntropy.size + 2 + blob.size)
+            .allocate(1 + 1 + 1 + seedEntropy.size + 2 + blob.size + 2 + settingsBytes.size)
             .put(VERSION)
             .put(networkIds.getValue(network))
             .put(seedEntropy.size.toByte())
             .put(seedEntropy)
             .putShort(blob.size.toShort())
             .put(blob)
+            .putShort(settingsBytes.size.toShort())
+            .put(settingsBytes)
             .array()
     }
 
     companion object {
-        private const val VERSION: Byte = 1
+        private const val VERSION: Byte = 2
+        private const val VERSION_WITHOUT_SETTINGS: Byte = 1
         private const val MAX_BLOB_BYTES = 1024
         private val ENTROPY_SIZES = setOf(16, 20, 24, 28, 32)
 
@@ -50,14 +60,21 @@ class SlotPayload(
         fun decode(bytes: ByteArray): SlotPayload {
             try {
                 val buffer = ByteBuffer.wrap(bytes)
-                require(buffer.get() == VERSION) { "Unsupported payload version" }
+                val version = buffer.get()
+                require(version == VERSION || version == VERSION_WITHOUT_SETTINGS) { "Unsupported payload version" }
                 val networkId = buffer.get()
                 val network = networkIds.entries.singleOrNull { it.value == networkId }?.key
                 requireNotNull(network) { "Unknown network id $networkId" }
                 val entropy = ByteArray(buffer.get().toInt() and 0xFF).also { buffer.get(it) }
                 val blob = ByteArray(buffer.short.toInt() and 0xFFFF).also { buffer.get(it) }
+                val settings =
+                    if (version == VERSION) {
+                        WalletSettings.decode(ByteArray(buffer.short.toInt() and 0xFFFF).also { buffer.get(it) })
+                    } else {
+                        WalletSettings()
+                    }
                 require(!buffer.hasRemaining()) { "Trailing bytes in payload" }
-                return SlotPayload(entropy, blob.takeIf { it.isNotEmpty() }, network)
+                return SlotPayload(entropy, blob.takeIf { it.isNotEmpty() }, network, settings)
             } catch (e: java.nio.BufferUnderflowException) {
                 throw IllegalArgumentException("Truncated payload", e)
             }

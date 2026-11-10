@@ -11,6 +11,7 @@ import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
 import io.github.brunogutierre.bitpocket.core.seed.BiometricRewrap
 import io.github.brunogutierre.bitpocket.core.seed.BiometricSeedVault
 import io.github.brunogutierre.bitpocket.core.seed.SlotPayload
+import io.github.brunogutierre.bitpocket.core.settings.WalletSettings
 import io.github.brunogutierre.bitpocket.core.wallet.WalletOpener
 import java.time.Duration
 import kotlin.coroutines.cancellation.CancellationException
@@ -98,6 +99,12 @@ interface WalletAccess {
 
     /** Checks the session PIN (e.g. before wiping) without decrypting anything for the caller. */
     fun verifyPin(pin: CharArray): SettingsOutcome
+
+    /** Saves new security settings in the slot after checking [pin] (ADR 0005). */
+    fun updateSettings(
+        pin: CharArray,
+        settings: WalletSettings,
+    ): SettingsOutcome
 }
 
 /** [WalletAccess] over the slot store. M1 uses slot A only; slot B stays a decoy. */
@@ -207,6 +214,16 @@ class SlotWalletAccess(
 
     override fun verifyPin(pin: CharArray): SettingsOutcome = withPayload(pin) { _, _ -> SettingsOutcome.Done }
 
+    override fun updateSettings(
+        pin: CharArray,
+        settings: WalletSettings,
+    ): SettingsOutcome =
+        withPayload(pin) { slot, payload ->
+            save(slot, pin, payload.withSettings(settings))
+            session.updateSettings(settings)
+            SettingsOutcome.Done
+        }
+
     private sealed interface Reauth {
         class Ok(
             val slot: SlotId,
@@ -291,7 +308,7 @@ class SlotWalletAccess(
     ) {
         try {
             val spending = opener.open(payload)
-            session.open(UnlockedWallet(slot, payload.network, payload.biometricSeed, spending))
+            session.open(UnlockedWallet(slot, payload.network, payload.biometricSeed, spending, payload.settings))
         } finally {
             payload.seedEntropy.wipe()
         }

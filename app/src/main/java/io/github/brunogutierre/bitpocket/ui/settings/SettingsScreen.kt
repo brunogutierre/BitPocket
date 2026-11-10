@@ -4,10 +4,16 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -17,14 +23,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.brunogutierre.bitpocket.R
 import io.github.brunogutierre.bitpocket.biometric.PromptBiometricVault
 import io.github.brunogutierre.bitpocket.biometric.SeedCipher
+import io.github.brunogutierre.bitpocket.core.settings.AutoLock
 import io.github.brunogutierre.bitpocket.settings.PinAction
 import io.github.brunogutierre.bitpocket.settings.SettingsUiState
 import io.github.brunogutierre.bitpocket.settings.SettingsViewModel
@@ -36,6 +45,7 @@ import io.github.brunogutierre.bitpocket.ui.components.PrimaryButton
 import io.github.brunogutierre.bitpocket.ui.components.SecureScreen
 import io.github.brunogutierre.bitpocket.ui.components.SeedWordGrid
 import io.github.brunogutierre.bitpocket.ui.components.WarningBanner
+import io.github.brunogutierre.bitpocket.ui.theme.Spacing
 
 @Composable
 fun SettingsScreen(
@@ -93,6 +103,7 @@ private fun SettingsList(
                     )
                 },
             )
+            Entry(stringResource(R.string.settings_auto_lock), stringResource(state.autoLock.label()), viewModel::openAutoLock)
             Entry(
                 stringResource(R.string.settings_show_phrase),
                 stringResource(R.string.settings_show_phrase_body),
@@ -119,6 +130,7 @@ private fun SettingsList(
             WarningBanner(stringResource(R.string.settings_biometric_failed_title), stringResource(R.string.settings_biometric_failed_body))
         }
     }
+    if (state.choosingAutoLock) AutoLockDialog(state.autoLock, viewModel::chooseAutoLock, viewModel::dismissAutoLock)
     if (state.confirmingWipe) {
         AlertDialog(
             onDismissRequest = viewModel::dismissWipe,
@@ -148,6 +160,7 @@ private fun PinStep(
             PinAction.SHOW_PHRASE -> R.string.settings_pin_phrase
             PinAction.ENABLE_BIOMETRICS -> R.string.settings_pin_biometric_on
             PinAction.DISABLE_BIOMETRICS -> R.string.settings_pin_biometric_off
+            PinAction.AUTO_LOCK -> R.string.settings_pin_auto_lock
             PinAction.WIPE -> R.string.settings_pin_wipe
         }
     PinPrompt(
@@ -187,6 +200,45 @@ private fun RecoveryPhrase(
         }
     }
 }
+
+@Composable
+private fun AutoLockDialog(
+    current: AutoLock,
+    onChoose: (AutoLock) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_auto_lock)) },
+        text = {
+            Column(Modifier.selectableGroup()) {
+                AutoLock.entries.forEach { option ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .selectable(selected = option == current, role = Role.RadioButton, onClick = { onChoose(option) })
+                                .padding(vertical = Spacing.sm),
+                    ) {
+                        RadioButton(selected = option == current, onClick = null)
+                        Text(stringResource(option.label()), modifier = Modifier.padding(start = Spacing.md))
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
+    )
+}
+
+private fun AutoLock.label(): Int =
+    when (this) {
+        AutoLock.IMMEDIATELY -> R.string.auto_lock_immediately
+        AutoLock.THIRTY_SECONDS -> R.string.auto_lock_30s
+        AutoLock.ONE_MINUTE -> R.string.auto_lock_1min
+        AutoLock.FIVE_MINUTES -> R.string.auto_lock_5min
+    }
 
 @Composable
 private fun SectionTitle(text: String) {

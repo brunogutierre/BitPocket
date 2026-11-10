@@ -10,6 +10,7 @@ import io.github.brunogutierre.bitpocket.core.session.SeedOutcome
 import io.github.brunogutierre.bitpocket.core.session.Session
 import io.github.brunogutierre.bitpocket.core.session.SettingsOutcome
 import io.github.brunogutierre.bitpocket.core.session.UnlockedWallet
+import io.github.brunogutierre.bitpocket.core.settings.AutoLock
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -121,6 +122,26 @@ class SettingsViewModelTest {
         assertEquals(listOf("verify 123456"), access.settingsCalls)
         assertTrue(wiped)
         assertTrue(vm.state.value.wiped)
+    }
+
+    @Test
+    fun `auto-lock changes only after the PIN`() {
+        access.settingsOutcomes += SettingsOutcome.Done
+        val vm = vm()
+        assertEquals(AutoLock.ONE_MINUTE, vm.state.value.autoLock)
+
+        vm.openAutoLock()
+        assertTrue(vm.state.value.choosingAutoLock)
+        vm.chooseAutoLock(AutoLock.ONE_MINUTE)
+        assertNull(vm.state.value.action, "choosing the current value needs no PIN")
+
+        vm.chooseAutoLock(AutoLock.IMMEDIATELY)
+        assertEquals(PinAction.AUTO_LOCK, vm.state.value.action)
+        vm.typePin()
+
+        assertEquals(listOf("settings 123456 IMMEDIATELY"), access.settingsCalls)
+        assertEquals(AutoLock.IMMEDIATELY, vm.state.value.autoLock)
+        assertNull(vm.state.value.pendingAutoLock)
     }
 
     @Test

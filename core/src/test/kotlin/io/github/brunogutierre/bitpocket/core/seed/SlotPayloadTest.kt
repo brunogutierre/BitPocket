@@ -2,6 +2,8 @@ package io.github.brunogutierre.bitpocket.core.seed
 
 import io.github.brunogutierre.bitpocket.core.crypto.SlotFile
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
+import io.github.brunogutierre.bitpocket.core.settings.AutoLock
+import io.github.brunogutierre.bitpocket.core.settings.WalletSettings
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
@@ -31,6 +33,27 @@ class SlotPayloadTest {
     }
 
     @Test
+    fun `round-trips settings and reads version 1 payloads with default settings`() {
+        val payload = SlotPayload(entropy, null, SupportedNetwork.SIGNET, WalletSettings(AutoLock.FIVE_MINUTES))
+
+        assertEquals(AutoLock.FIVE_MINUTES, SlotPayload.decode(payload.encode()).settings.autoLock)
+
+        // v1: version | network | entropy length | entropy | blob length (0), no settings section.
+        val v1 = byteArrayOf(1, 1, 16) + ByteArray(16) { 4 } + byteArrayOf(0, 0)
+        val decoded = SlotPayload.decode(v1)
+        assertEquals(WalletSettings(), decoded.settings)
+        assertArrayEquals(ByteArray(16) { 4 }, decoded.seedEntropy)
+    }
+
+    @Test
+    fun `the largest payload leaves room for future settings`() {
+        val largest = SlotPayload(ByteArray(32), ByteArray(1024), SupportedNetwork.SIGNET, WalletSettings()).encode()
+
+        // Vault keys, guardrails and a custom server URL must still fit in the rest.
+        assertTrue(SlotFile.MAX_PAYLOAD_BYTES - largest.size > 2_500, "${largest.size} bytes")
+    }
+
+    @Test
     fun `uses stable network ids`() {
         assertEquals(1, SlotPayload(ByteArray(16), null, SupportedNetwork.SIGNET).encode()[1].toInt())
         assertEquals(2, SlotPayload(ByteArray(16), null, SupportedNetwork.TESTNET4).encode()[1].toInt())
@@ -43,14 +66,20 @@ class SlotPayloadTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = ["version", "network", "truncated", "trailing"])
+    @ValueSource(strings = ["version", "network", "truncated", "trailing", "settings"])
     fun `rejects malformed payloads`(corruption: String) {
         val valid = SlotPayload(entropy, null, SupportedNetwork.SIGNET).encode()
         val corrupted =
             when (corruption) {
                 "version" -> valid.copyOf().also { it[0] = 9 }
+
                 "network" -> valid.copyOf().also { it[1] = 99 }
+
                 "truncated" -> valid.copyOf(valid.size - 1)
+
+                "settings" -> valid.copyOf().also { it[it.size - 1] = 42 }
+
+                // unknown auto-lock id
                 else -> valid + 0
             }
 

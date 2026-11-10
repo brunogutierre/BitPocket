@@ -10,6 +10,8 @@ import io.github.brunogutierre.bitpocket.core.session.SeedOutcome
 import io.github.brunogutierre.bitpocket.core.session.Session
 import io.github.brunogutierre.bitpocket.core.session.SettingsOutcome
 import io.github.brunogutierre.bitpocket.core.session.WalletAccess
+import io.github.brunogutierre.bitpocket.core.settings.AutoLock
+import io.github.brunogutierre.bitpocket.core.settings.WalletSettings
 import io.github.brunogutierre.bitpocket.security.LockoutCountdown
 import io.github.brunogutierre.bitpocket.security.PinBuffer
 import kotlinx.coroutines.CoroutineDispatcher
@@ -22,11 +24,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** Settings actions that re-enter the PIN first. */
-enum class PinAction { SHOW_PHRASE, ENABLE_BIOMETRICS, DISABLE_BIOMETRICS, WIPE }
+enum class PinAction { SHOW_PHRASE, ENABLE_BIOMETRICS, DISABLE_BIOMETRICS, AUTO_LOCK, WIPE }
 
 data class SettingsUiState(
     val biometricOn: Boolean = false,
     val biometricAvailable: Boolean = false,
+    val autoLock: AutoLock = AutoLock.DEFAULT,
+    val choosingAutoLock: Boolean = false,
+    /** The auto-lock time waiting for the PIN. */
+    val pendingAutoLock: AutoLock? = null,
     /** The PIN pad is shown for this action. */
     val action: PinAction? = null,
     val confirmingWipe: Boolean = false,
@@ -56,7 +62,13 @@ class SettingsViewModel(
 ) : ViewModel() {
     val network: SupportedNetwork = session.wallet?.network ?: SupportedNetwork.DEFAULT
     private val _state =
-        MutableStateFlow(SettingsUiState(biometricOn = session.wallet?.biometricSeed != null, biometricAvailable = biometricAvailable))
+        MutableStateFlow(
+            SettingsUiState(
+                biometricOn = session.wallet?.biometricSeed != null,
+                biometricAvailable = biometricAvailable,
+                autoLock = session.wallet?.settings?.autoLock ?: AutoLock.DEFAULT,
+            ),
+        )
     val state: StateFlow<SettingsUiState> = _state.asStateFlow()
     private val pin = PinBuffer()
     private val countdown = LockoutCountdown(viewModelScope) { seconds -> _state.update { it.copy(lockoutSeconds = seconds) } }
@@ -64,6 +76,18 @@ class SettingsViewModel(
     fun showRecoveryPhrase() = ask(PinAction.SHOW_PHRASE)
 
     fun setBiometricSigning(on: Boolean) = ask(if (on) PinAction.ENABLE_BIOMETRICS else PinAction.DISABLE_BIOMETRICS)
+
+    fun openAutoLock() = _state.update { it.copy(choosingAutoLock = true) }
+
+    fun dismissAutoLock() = _state.update { it.copy(choosingAutoLock = false) }
+
+    /** Every security setting changes only after the PIN (ADR 0005). */
+    fun chooseAutoLock(option: AutoLock) {
+        _state.update { it.copy(choosingAutoLock = false) }
+        if (option == _state.value.autoLock) return
+        _state.update { it.copy(pendingAutoLock = option) }
+        ask(PinAction.AUTO_LOCK)
+    }
 
     fun requestWipe() = _state.update { it.copy(confirmingWipe = true) }
 
@@ -76,7 +100,16 @@ class SettingsViewModel(
 
     fun cancelPin() {
         pin.clear()
-        _state.update { it.copy(action = null, pinEntered = 0, wrongPin = false, failed = false, awaitingSeal = false) }
+        _state.update {
+            it.copy(
+                action = null,
+                pinEntered = 0,
+                wrongPin = false,
+                failed = false,
+                awaitingSeal = false,
+                pendingAutoLock = null,
+            )
+        }
     }
 
     fun closePhrase() = _state.update { it.copy(phrase = null) }
@@ -150,6 +183,10 @@ class SettingsViewModel(
                         settle(withContext(workDispatcher) { walletAccess.verifyPin(attempt) }) { wipe(it) }
                     }
 
+                    PinAction.AUTO_LOCK -> {
+                        saveAutoLock(attempt)
+                    }
+
                     PinAction.ENABLE_BIOMETRICS -> {
                         Unit
                     }
@@ -183,6 +220,14 @@ class SettingsViewModel(
             SeedOutcome.Failed -> {
                 handleDenied(SettingsOutcome.Failed)
             }
+        }
+    }
+
+    private suspend fun saveAutoLock(attempt: CharArray) {
+        val option = _state.value.pendingAutoLock ?: return
+        val settings = (session.wallet?.settings ?: WalletSettings()).copy(autoLock = option)
+        settle(withContext(workDispatcher) { walletAccess.updateSettings(attempt, settings) }) {
+            it.copy(autoLock = option, pendingAutoLock = null)
         }
     }
 

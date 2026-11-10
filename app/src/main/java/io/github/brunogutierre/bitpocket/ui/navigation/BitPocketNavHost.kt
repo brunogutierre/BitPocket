@@ -43,6 +43,8 @@ import io.github.brunogutierre.bitpocket.ui.receive.ReceiveScreen
 import io.github.brunogutierre.bitpocket.ui.send.SendScreen
 import io.github.brunogutierre.bitpocket.ui.settings.ChangePinScreen
 import io.github.brunogutierre.bitpocket.ui.settings.SettingsScreen
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
 
 private const val NAV_DURATION_MS = 300
 
@@ -64,6 +66,16 @@ fun BitPocketNavHost(
     val resetTo: (NavKey) -> Unit = { route ->
         backStack.clear()
         backStack.add(route)
+    }
+    // Whenever the session locks (auto-lock, Lock, erase), leave the screens that need it.
+    LaunchedEffect(container.session) {
+        container.session.walletState.drop(1).filter { it == null }.collect {
+            val current = backStack.lastOrNull() ?: return@collect
+            val draft = container.onboardingDraft
+            val walletExists = container.launchState() == LaunchState.LOCKED
+            val allowed = guardRoute(current, walletExists, false, draft.words.isNotEmpty(), draft.entropy != null)
+            if (allowed != current) resetTo(allowed)
+        }
     }
     val top = backStack.lastOrNull()
     LaunchedEffect(top) {

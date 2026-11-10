@@ -6,6 +6,7 @@ import io.github.brunogutierre.bitpocket.core.session.SeedOutcome
 import io.github.brunogutierre.bitpocket.core.session.SettingsOutcome
 import io.github.brunogutierre.bitpocket.core.session.UnlockOutcome
 import io.github.brunogutierre.bitpocket.core.session.WalletAccess
+import io.github.brunogutierre.bitpocket.core.settings.WalletSettings
 
 class FakeWalletAccess : WalletAccess {
     var createdPin: String? = null
@@ -61,6 +62,14 @@ class FakeWalletAccess : WalletAccess {
 
     override fun verifyPin(pin: CharArray): SettingsOutcome {
         settingsCalls += "verify ${String(pin)}"
+        return settingsOutcomes.removeFirst()
+    }
+
+    override fun updateSettings(
+        pin: CharArray,
+        settings: WalletSettings,
+    ): SettingsOutcome {
+        settingsCalls += "settings ${String(pin)} ${settings.autoLock}"
         return settingsOutcomes.removeFirst()
     }
 }

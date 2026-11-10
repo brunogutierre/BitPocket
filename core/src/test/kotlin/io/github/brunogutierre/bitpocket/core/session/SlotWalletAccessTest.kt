@@ -13,6 +13,8 @@ import io.github.brunogutierre.bitpocket.core.crypto.TEST_KDF_PARAMS
 import io.github.brunogutierre.bitpocket.core.crypto.UnlockService
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
 import io.github.brunogutierre.bitpocket.core.seed.FakeBiometricSeedVault
+import io.github.brunogutierre.bitpocket.core.settings.AutoLock
+import io.github.brunogutierre.bitpocket.core.settings.WalletSettings
 import io.github.brunogutierre.bitpocket.core.testing.FakePocketWallet
 import io.github.brunogutierre.bitpocket.core.testing.FakeWalletOpener
 import kotlinx.coroutines.test.runTest
@@ -155,6 +157,27 @@ class SlotWalletAccessTest {
             assertNull(session.wallet!!.biometricSeed)
             assertEquals(SettingsOutcome.WrongPin(Duration.ZERO), access.setBiometricSigning("000000".toCharArray(), vault))
         }
+
+    @Test
+    fun `settings are saved in the slot and applied to the session`() {
+        val access = access()
+        access.create("123456".toCharArray(), entropy, SupportedNetwork.SIGNET)
+
+        assertEquals(
+            SettingsOutcome.WrongPin(Duration.ZERO),
+            access.updateSettings("000000".toCharArray(), WalletSettings(AutoLock.IMMEDIATELY)),
+        )
+        assertEquals(SettingsOutcome.Done, access.updateSettings("123456".toCharArray(), WalletSettings(AutoLock.IMMEDIATELY)))
+
+        assertEquals(
+            AutoLock.IMMEDIATELY,
+            session.walletState.value!!
+                .settings.autoLock,
+        )
+        session.lock()
+        access.unlock("123456".toCharArray())
+        assertEquals(AutoLock.IMMEDIATELY, session.wallet!!.settings.autoLock)
+    }
 
     @Test
     fun `wiping deletes slots, attempts and wallet databases`(
