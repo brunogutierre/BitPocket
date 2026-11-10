@@ -243,5 +243,22 @@
     <string name="heartbeat_expired_title">The heir can spend now</string>
     <string name="heartbeat_expired_body">Some Vault coins are older than the heir waiting time. Refresh the Vault to restart it, unless the heir should spend them.</string>
     <string name="heartbeat_refresh">Refresh the Vault</string>
+    <string name="heir_title">Claim an inheritance</string>
+    <string name="settings_heir_body">You hold heir words and a Vault backup file.</string>
+    <string name="heir_intro">If someone left you a BitPocket Vault, you need their Vault backup file and your 12 heir words. Coins can be claimed once they have not moved for the Vault\'s waiting time. Nothing is stored on this phone.</string>
+    <string name="heir_pick_file">Choose the backup file</string>
+    <string name="heir_words_body">Type your 12 heir words. They open the backup and sign the claim, and are never stored.</string>
+    <string name="heir_scanning">Looking for the Vault\'s coins</string>
+    <string name="heir_claimable">Can be claimed now</string>
+    <string name="heir_no_coins">This Vault has no coins.</string>
+    <string name="heir_coin_ready">Can be claimed now</string>
+    <string name="heir_coin_waiting" tools:ignore="PluralsCandidate">Claimable in %1$d blocks (about %2$d days)</string>
+    <string name="heir_destination">Send the claimed coins to</string>
+    <string name="heir_claim">Claim</string>
+    <string name="heir_done">The claim was broadcast. The coins arrive at your address once it confirms.</string>
+    <string name="heir_error_backup">This file is not a BitPocket Vault backup, or it was damaged.</string>
+    <string name="heir_error_not_heir">These words are not the heir words of this Vault.</string>
+    <string name="heir_error_words">These are not 12 valid recovery words.</string>
+    <string name="heir_error_nothing">No coin has waited long enough yet.</string>
     <string name="pin_too_weak">PIN too easy to guess. Choose another one.</string>
 </resources>

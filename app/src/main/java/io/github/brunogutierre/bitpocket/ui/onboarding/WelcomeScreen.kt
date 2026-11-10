@@ -36,6 +36,7 @@ fun WelcomeScreen(
     viewModel: WelcomeViewModel,
     onShowNewSeed: () -> Unit,
     onRestore: () -> Unit,
+    onClaimInheritance: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     LaunchedEffect(viewModel) {
@@ -47,6 +48,7 @@ fun WelcomeScreen(
         bottomActions = {
             PrimaryButton(stringResource(R.string.welcome_create), onClick = { viewModel.onAction(WelcomeAction.Create) })
             SecondaryButton(stringResource(R.string.welcome_restore), onClick = { viewModel.onAction(WelcomeAction.Restore) })
+            TextButton(onClick = onClaimInheritance, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.heir_title)) }
         },
     ) {
         Text(stringResource(R.string.tagline), style = MaterialTheme.typography.headlineSmall)
