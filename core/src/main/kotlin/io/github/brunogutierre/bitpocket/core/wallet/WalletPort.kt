@@ -47,6 +47,15 @@ interface WalletPort {
     /** Recent spending for the guardrails, over the last [windowBlocks] blocks of the synced tip. */
     suspend fun spendingStats(windowBlocks: Int): SpendingStats
 
+    /** Unspent coins, largest first (coin control). */
+    suspend fun coins(): List<Coin>
+
+    /** A frozen coin is never picked to fund a transaction (BDK locked outpoint, persisted). */
+    suspend fun setFrozen(
+        outpoint: String,
+        frozen: Boolean,
+    )
+
     companion object {
         const val MAX_UNUSED_ADDRESSES = 10
     }
@@ -101,6 +110,14 @@ interface VaultPort {
         heirSeed: ByteArray,
     ): String
 }
+
+/** An unspent coin of a pocket; [outpoint] is `txid:vout`. */
+data class Coin(
+    val outpoint: String,
+    val sats: Long,
+    val confirmations: Int,
+    val frozen: Boolean,
+)
 
 /** A Vault coin seen by the heir: spendable once [blocksLeft] is 0. */
 data class HeirCoin(
