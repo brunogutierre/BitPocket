@@ -15,6 +15,7 @@ import org.bitcoindevkit.Wallet
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -50,6 +51,18 @@ class BdkWalletTest {
                 assertEquals(0, wallet.nextReceiveAddress().index)
             }
             assertTrue(File(dir, "spending.sqlite").isFile)
+        }
+
+    @Test
+    fun `fresh addresses stop while too many revealed ones are unused`() =
+        runTest {
+            BdkWallet.open(dir, descriptors, network, chain).use { wallet ->
+                val fresh = List(WalletPort.MAX_UNUSED_ADDRESSES) { wallet.freshReceiveAddress() }
+
+                assertEquals((0 until WalletPort.MAX_UNUSED_ADDRESSES).toList(), fresh.map { it?.index })
+                assertNull(wallet.freshReceiveAddress())
+                assertEquals(0, wallet.nextReceiveAddress().index)
+            }
         }
 
     @Test

@@ -10,6 +10,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.brunogutierre.bitpocket.R
 import io.github.brunogutierre.bitpocket.onboarding.CreateSeedViewModel
 import io.github.brunogutierre.bitpocket.onboarding.VerifySeedViewModel
+import io.github.brunogutierre.bitpocket.ui.components.PageScaffold
 import io.github.brunogutierre.bitpocket.ui.components.PrimaryButton
 import io.github.brunogutierre.bitpocket.ui.components.SeedWordGrid
 import io.github.brunogutierre.bitpocket.ui.components.WarningBanner
@@ -22,7 +23,7 @@ fun CreateSeedScreen(
     onWrittenDown: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    OnboardingScaffold(
+    PageScaffold(
         title = stringResource(R.string.create_title),
         onBack = onBack,
         bottomActions = {
@@ -42,7 +43,7 @@ fun VerifySeedScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     LaunchedEffect(viewModel) { viewModel.verified.collect { onVerified() } }
-    OnboardingScaffold(title = stringResource(R.string.verify_title), onBack = onBack) {
+    PageScaffold(title = stringResource(R.string.verify_title), onBack = onBack) {
         Text(
             stringResource(R.string.verify_step, state.step, state.totalSteps),
             style = MaterialTheme.typography.labelLarge,

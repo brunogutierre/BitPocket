@@ -29,6 +29,7 @@ import io.github.brunogutierre.bitpocket.R
 import io.github.brunogutierre.bitpocket.onboarding.RestoreAction
 import io.github.brunogutierre.bitpocket.onboarding.RestoreError
 import io.github.brunogutierre.bitpocket.onboarding.RestoreSeedViewModel
+import io.github.brunogutierre.bitpocket.ui.components.PageScaffold
 import io.github.brunogutierre.bitpocket.ui.components.PrimaryButton
 import io.github.brunogutierre.bitpocket.ui.theme.Spacing
 import io.github.brunogutierre.bitpocket.ui.theme.monoTypography
@@ -52,7 +53,7 @@ fun RestoreSeedScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     LaunchedEffect(viewModel) { viewModel.restored.collect { onRestored() } }
-    OnboardingScaffold(
+    PageScaffold(
         title = stringResource(R.string.restore_title),
         onBack = onBack,
         bottomActions = {

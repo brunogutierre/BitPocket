@@ -1,4 +1,4 @@
-package io.github.brunogutierre.bitpocket.ui.onboarding
+package io.github.brunogutierre.bitpocket.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -19,15 +19,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import io.github.brunogutierre.bitpocket.R
+import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
 import io.github.brunogutierre.bitpocket.ui.theme.Spacing
 import io.github.brunogutierre.bitpocket.ui.theme.screenHorizontalPadding
 
-/** Scrollable onboarding page with an optional back arrow and actions pinned at the bottom. */
+/**
+ * Scrollable page with an optional back arrow and actions pinned at the bottom. Wallet pages pass
+ * their [network] to show the test-money badge, as on Home.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun OnboardingScaffold(
+fun PageScaffold(
     title: String,
     onBack: (() -> Unit)?,
+    network: SupportedNetwork? = null,
     bottomActions: @Composable ColumnScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -42,6 +47,7 @@ fun OnboardingScaffold(
                         }
                     }
                 },
+                actions = { if (network != null) NetworkBadge(network, Modifier.padding(end = Spacing.lg)) },
             )
         },
     ) { innerPadding ->

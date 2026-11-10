@@ -27,6 +27,9 @@ data object Lock : NavKey
 @Serializable
 data object Home : NavKey
 
+@Serializable
+data object Receive : NavKey
+
 fun LaunchState.startRoute(): NavKey =
     when (this) {
         LaunchState.ONBOARDING -> Welcome

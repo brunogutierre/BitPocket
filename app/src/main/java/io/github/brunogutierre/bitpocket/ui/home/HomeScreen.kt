@@ -24,6 +24,7 @@ import io.github.brunogutierre.bitpocket.core.format.BitcoinFormat
 import io.github.brunogutierre.bitpocket.core.wallet.Balance
 import io.github.brunogutierre.bitpocket.home.HomeViewModel
 import io.github.brunogutierre.bitpocket.ui.components.BitPocketTopBar
+import io.github.brunogutierre.bitpocket.ui.components.PrimaryButton
 import io.github.brunogutierre.bitpocket.ui.components.SecondaryButton
 import io.github.brunogutierre.bitpocket.ui.components.WarningBanner
 import io.github.brunogutierre.bitpocket.ui.theme.Spacing
@@ -34,6 +35,7 @@ import io.github.brunogutierre.bitpocket.ui.theme.screenHorizontalPadding
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel,
+    onReceive: () -> Unit,
     onLocked: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -54,6 +56,7 @@ fun HomeScreen(
                         WarningBanner(stringResource(R.string.home_sync_failed_title), stringResource(R.string.home_sync_failed_body))
                     }
                 }
+                item { PrimaryButton(stringResource(R.string.home_receive), onClick = onReceive) }
                 item {
                     SecondaryButton(stringResource(R.string.home_lock), onClick = {
                         viewModel.lock()
