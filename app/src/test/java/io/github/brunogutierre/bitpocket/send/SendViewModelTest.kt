@@ -5,6 +5,8 @@ import io.github.brunogutierre.bitpocket.FakeWalletAccess
 import io.github.brunogutierre.bitpocket.MainDispatcherExtension
 import io.github.brunogutierre.bitpocket.biometric.BiometricFailure
 import io.github.brunogutierre.bitpocket.biometric.BiometricSeedResult
+import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
+import io.github.brunogutierre.bitpocket.core.seed.Bip39
 import io.github.brunogutierre.bitpocket.core.send.AmountError
 import io.github.brunogutierre.bitpocket.core.send.BlockReason
 import io.github.brunogutierre.bitpocket.core.send.ConfirmReason
@@ -20,6 +22,7 @@ import io.github.brunogutierre.bitpocket.core.session.SeedOutcome
 import io.github.brunogutierre.bitpocket.core.settings.Guardrails
 import io.github.brunogutierre.bitpocket.core.settings.ScheduledGuardrails
 import io.github.brunogutierre.bitpocket.core.settings.WalletSettings
+import io.github.brunogutierre.bitpocket.core.vault.VaultKeys
 import io.github.brunogutierre.bitpocket.core.wallet.ChainUnavailableException
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -289,9 +292,38 @@ class SendViewModelTest {
 
     @Test
     fun `Move to Vault starts with the Vault address`() {
-        val vm = SendViewModel(pocket, access, null, WalletSettings(), { ADDRESS }, main.dispatcher)
+        val vm = SendViewModel(pocket, access, null, WalletSettings(), { ADDRESS }, workDispatcher = main.dispatcher)
 
         assertEquals(ADDRESS, vm.state.value.addressText)
+    }
+
+    @Test
+    fun `Vault spends ask for the recovery words, check them, then the PIN`() {
+        val recoveryEntropy = ByteArray(16) { 2 }
+        val recoveryKey = VaultKeys.publicKey(recoveryEntropy, SupportedNetwork.SIGNET)
+        val words = Bip39.toWords(recoveryEntropy).joinToString(" ")
+        pocket.plans += plan
+        access.seedOutcomes += SeedOutcome.Seed(ByteArray(16) { 1 })
+        val vm = SendViewModel(pocket, access, null, WalletSettings(), null, recoveryKey, main.dispatcher)
+        vm.onAddressChange(ADDRESS)
+        vm.onAmountChange("10000")
+        vm.review()
+
+        vm.confirm()
+        assertEquals(SendStage.RECOVERY, vm.state.value.stage)
+        vm.onRecoveryTextChange("abandon " + words.substringAfter(' '))
+        vm.submitRecovery()
+        assertTrue(vm.state.value.recoveryError)
+
+        vm.onRecoveryTextChange("  ${words.uppercase()} ")
+        vm.submitRecovery()
+        assertEquals(SendStage.AUTH_PIN, vm.state.value.stage)
+        assertEquals("", vm.state.value.recoveryText)
+        "123456".forEach(vm::pinDigit)
+
+        assertEquals(SendStage.DONE, vm.state.value.stage)
+        assertEquals(listOf(1.toByte() to 2.toByte()), pocket.vaultSends)
+        assertTrue(pocket.sentWith.isEmpty(), "never the single-key path")
     }
 
     private companion object {

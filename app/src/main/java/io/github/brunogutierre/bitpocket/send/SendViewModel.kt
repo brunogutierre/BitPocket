@@ -6,6 +6,8 @@ import io.github.brunogutierre.bitpocket.biometric.BiometricFailure
 import io.github.brunogutierre.bitpocket.biometric.BiometricSeedResult
 import io.github.brunogutierre.bitpocket.core.crypto.wipe
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
+import io.github.brunogutierre.bitpocket.core.seed.MnemonicService
+import io.github.brunogutierre.bitpocket.core.seed.RestoreResult
 import io.github.brunogutierre.bitpocket.core.send.AmountError
 import io.github.brunogutierre.bitpocket.core.send.AmountParser
 import io.github.brunogutierre.bitpocket.core.send.AmountResult
@@ -27,8 +29,10 @@ import io.github.brunogutierre.bitpocket.core.session.WalletAccess
 import io.github.brunogutierre.bitpocket.core.settings.Guardrails
 import io.github.brunogutierre.bitpocket.core.settings.GuardrailsPolicy
 import io.github.brunogutierre.bitpocket.core.settings.WalletSettings
+import io.github.brunogutierre.bitpocket.core.vault.VaultKeys
 import io.github.brunogutierre.bitpocket.core.wallet.ChainUnavailableException
 import io.github.brunogutierre.bitpocket.core.wallet.PocketWallet
+import io.github.brunogutierre.bitpocket.core.wallet.VaultPort
 import io.github.brunogutierre.bitpocket.security.LockoutCountdown
 import io.github.brunogutierre.bitpocket.security.PinBuffer
 import kotlinx.coroutines.CoroutineDispatcher
@@ -47,6 +51,9 @@ enum class SendStage {
 
     /** The camera looks for a QR code with an address or bitcoin: link. */
     SCAN,
+
+    /** Vault spends: the recovery words are typed to co-sign (ADR 0007). */
+    RECOVERY,
     REVIEW,
 
     /** The screen shows BiometricPrompt and reports back through [SendViewModel.onBiometricResult]. */
@@ -86,6 +93,9 @@ data class SendUiState(
     /** The last send attempt could not reach the backend: nothing was sent. */
     val broadcastFailed: Boolean = false,
     val txid: String? = null,
+    val recoveryText: String = "",
+    /** The typed recovery words are not a valid phrase, or not this Vault's recovery key. */
+    val recoveryError: Boolean = false,
 ) {
     val pinKeysEnabled: Boolean get() = !pinVerifying && lockoutSeconds == 0L
 
@@ -124,12 +134,17 @@ class SendViewModel(
     private val settings: WalletSettings = WalletSettings(),
     /** An address to start with, e.g. the Vault's for "Move to Vault". */
     private val prefill: (suspend () -> String?)? = null,
+    /** Set when spending from the Vault: its RECOVERY public key, to check the typed words. */
+    private val vaultRecoveryKey: String? = null,
     private val workDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
     val network: SupportedNetwork = pocket.network
     private val _state = MutableStateFlow(SendUiState())
     val state: StateFlow<SendUiState> = _state.asStateFlow()
     private val pin = PinBuffer()
+    private var recoverySeed: ByteArray? = null
+    private val vault: VaultPort? get() = if (vaultRecoveryKey != null) pocket as VaultPort else null
+    val isVault: Boolean get() = vaultRecoveryKey != null
     private val countdown = LockoutCountdown(viewModelScope) { seconds -> _state.update { it.copy(lockoutSeconds = seconds) } }
 
     init {
@@ -196,9 +211,20 @@ class SendViewModel(
         _state.update { it.copy(planning = true, spendError = null) }
         viewModelScope.launch {
             try {
-                val plan = pocket.planSpend(SpendRequest(address, sendAmount, feeRate))
+                val request = SpendRequest(address, sendAmount, feeRate)
+                val plan = vault?.planVaultSpend(request) ?: pocket.planSpend(request)
                 val stats = pocket.spendingStats(Guardrails.WINDOW_BLOCKS)
-                val verdict = GuardrailCheck.evaluate(GuardrailsPolicy.effective(settings, stats.tipHeight), plan, stats)
+                // The Vault already needs the offline recovery key: guardrails apply to Spending only.
+                val guardrails =
+                    if (isVault) {
+                        Guardrails(
+                            confirmNewRecipients = false,
+                            confirmLargeShare = false,
+                        )
+                    } else {
+                        GuardrailsPolicy.effective(settings, stats.tipHeight)
+                    }
+                val verdict = GuardrailCheck.evaluate(guardrails, plan, stats)
                 val lookalike = Lookalike.find(plan.recipient, stats.pastRecipients + stats.ownAddresses)
                 _state.update {
                     it.copy(
@@ -227,9 +253,36 @@ class SendViewModel(
     /** "Confirm and send" on REVIEW. */
     fun confirm() {
         if (_state.value.plan == null || !_state.value.canConfirm) return
+        if (isVault && recoverySeed == null) {
+            _state.update { it.copy(stage = SendStage.RECOVERY, broadcastFailed = false, spendError = null, recoveryError = false) }
+            return
+        }
         val stage = if (biometricSeed != null) SendStage.AUTH_BIOMETRIC else SendStage.AUTH_PIN
         _state.update { it.copy(stage = stage, broadcastFailed = false, spendError = null, biometricFailure = null, authFailed = false) }
     }
+
+    fun onRecoveryTextChange(text: String) = _state.update { it.copy(recoveryText = text, recoveryError = false) }
+
+    /** Checks the typed words against the Vault's RECOVERY key, keeps the seed, then asks for the phone's. */
+    fun submitRecovery() {
+        val words =
+            _state.value.recoveryText
+                .trim()
+                .lowercase()
+                .split(Regex("\\s+"))
+        val seed = (MnemonicService().restore(words) as? RestoreResult.Valid)?.entropy
+        if (seed == null || VaultKeys.publicKey(seed, network) != vaultRecoveryKey) {
+            seed?.wipe()
+            _state.update { it.copy(recoveryError = true) }
+            return
+        }
+        recoverySeed = seed
+        // The words leave the state as soon as they are checked.
+        _state.update { it.copy(recoveryText = "") }
+        confirm()
+    }
+
+    fun cancelRecovery() = _state.update { it.copy(stage = SendStage.REVIEW, recoveryText = "", recoveryError = false) }
 
     /** Leaves authentication without signing. */
     fun cancelAuth() {
@@ -296,7 +349,16 @@ class SendViewModel(
         _state.update { it.copy(stage = SendStage.SENDING) }
         viewModelScope.launch {
             try {
-                val txid = pocket.send(plan, entropy)
+                val recovery = recoverySeed
+                val vaultPort = vault
+                val txid =
+                    if (vaultPort != null &&
+                        recovery != null
+                    ) {
+                        vaultPort.sendFromVault(plan, entropy, recovery)
+                    } else {
+                        pocket.send(plan, entropy)
+                    }
                 _state.update { it.copy(stage = SendStage.DONE, txid = txid) }
             } catch (e: SpendException) {
                 _state.update { it.copy(stage = SendStage.REVIEW, spendError = e.error) }
@@ -304,9 +366,18 @@ class SendViewModel(
                 _state.update { it.copy(stage = SendStage.REVIEW, broadcastFailed = true) }
             } finally {
                 entropy.wipe()
+                wipeRecovery()
             }
         }
     }
 
-    override fun onCleared() = pin.clear()
+    private fun wipeRecovery() {
+        recoverySeed?.wipe()
+        recoverySeed = null
+    }
+
+    override fun onCleared() {
+        pin.clear()
+        wipeRecovery()
+    }
 }

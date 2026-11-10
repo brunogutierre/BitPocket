@@ -12,12 +12,13 @@ import io.github.brunogutierre.bitpocket.core.wallet.ChainUnavailableException
 import io.github.brunogutierre.bitpocket.core.wallet.HistoryItem
 import io.github.brunogutierre.bitpocket.core.wallet.PocketWallet
 import io.github.brunogutierre.bitpocket.core.wallet.ReceiveAddress
+import io.github.brunogutierre.bitpocket.core.wallet.VaultPocket
 import kotlinx.coroutines.CompletableDeferred
 
 /** A pocket whose sync either completes, fails like an offline server, or waits for [syncGate]. */
 class FakePocketWallet(
     override val network: SupportedNetwork = SupportedNetwork.SIGNET,
-) : PocketWallet {
+) : VaultPocket {
     var balance = Balance(0, 0)
     var balanceAfterSync: Balance? = null
     var offline = false
@@ -78,6 +79,21 @@ class FakePocketWallet(
         sendError?.let { throw it }
         sentWith += seedEntropy.copyOf()
         return "txid-${sentWith.size}"
+    }
+
+    /** Vault spends reuse [plans]; seeds are recorded as "phone/recovery" first bytes. */
+    val vaultSends = mutableListOf<Pair<Byte, Byte>>()
+
+    override suspend fun planVaultSpend(request: SpendRequest): SpendPlan = planSpend(request)
+
+    override suspend fun sendFromVault(
+        plan: SpendPlan,
+        phoneSeed: ByteArray,
+        recoverySeed: ByteArray,
+    ): String {
+        sendError?.let { throw it }
+        vaultSends += phoneSeed.first() to recoverySeed.first()
+        return "vault-txid-${vaultSends.size}"
     }
 
     override fun close() {

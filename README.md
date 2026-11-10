@@ -101,7 +101,7 @@ on every pull request and push to `main`.
 - [x] M0 — Bootstrap: build, CI, coverage, `:core` module and BDK de-risking spikes
 - [x] M1 — Spending wallet: encrypted storage, PIN, onboarding, sync, receive, send with biometrics, history, auto-lock
 - [x] M2 — Safety UX: address fingerprint, guardrails, clipboard/poisoning warnings
-- [ ] M3 — Vault: miniscript 2-of-2 with offline recovery key, encrypted descriptor backup
+- [x] M3 — Vault: miniscript 2-of-2 with offline recovery key, encrypted descriptor backup
 - [ ] M4 — Inheritance: heir timelock path and heartbeat refresh
 - [ ] M5 — Duress PIN and decoy wallet
 - [ ] M6 — Privacy: custom server, coin control, BIP329 labels

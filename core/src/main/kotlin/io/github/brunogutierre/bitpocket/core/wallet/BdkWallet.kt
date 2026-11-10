@@ -10,6 +10,9 @@ import io.github.brunogutierre.bitpocket.core.send.SpendPlan
 import io.github.brunogutierre.bitpocket.core.send.SpendRequest
 import io.github.brunogutierre.bitpocket.core.send.SpendingStats
 import io.github.brunogutierre.bitpocket.core.vault.VaultConfig
+import io.github.brunogutierre.bitpocket.core.vault.VaultGuard
+import io.github.brunogutierre.bitpocket.core.vault.VaultKeys
+import io.github.brunogutierre.bitpocket.core.vault.VaultRole
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -31,6 +34,7 @@ import org.bitcoindevkit.PersistenceException
 import org.bitcoindevkit.Persister
 import org.bitcoindevkit.Psbt
 import org.bitcoindevkit.Script
+import org.bitcoindevkit.SignersContainer
 import org.bitcoindevkit.Transaction
 import org.bitcoindevkit.TxBuilder
 import org.bitcoindevkit.Txid
@@ -56,7 +60,7 @@ class BdkWallet internal constructor(
     private val dispatcher: CoroutineDispatcher = serialIoDispatcher(),
     /** Set for the Vault pocket: its spends need a policy path and two signers (ADR 0002). */
     private val vault: VaultConfig? = null,
-) : PocketWallet {
+) : VaultPocket {
     override suspend fun balance(): Balance =
         onWallet {
             val balance = wallet.balance()
@@ -187,48 +191,117 @@ class BdkWallet internal constructor(
     override suspend fun planSpend(request: SpendRequest): SpendPlan =
         onWallet {
             check(vault == null) { "Vault spends need the 2-of-2 path and the recovery key" }
-            val recipient =
-                try {
-                    Address(request.address, network.toBdkNetwork())
-                } catch (e: AddressParseException) {
-                    throw SpendException(SpendError.INVALID_ADDRESS, e)
-                }
-            recipient.use { address ->
-                address.scriptPubkey().use { script ->
-                    val psbt = buildPsbt(script, request)
-                    psbt.use {
-                        SpendGuard.check(it, wallet)
-                        wallet.persist(persister) // building reveals a change address
-                        planOf(it, request, address.toString(), script.toBytes())
-                    }
+            plan(request) { it }
+        }
+
+    /** A Vault spend on the 2-of-2 branch, chosen explicitly for BOTH keychains (ADR 0002). */
+    override suspend fun planVaultSpend(request: SpendRequest): SpendPlan =
+        onWallet {
+            checkNotNull(vault) { "Not a Vault pocket" }
+            plan(request) { builder ->
+                builder
+                    .policyPath(branchPath(KeychainKind.EXTERNAL, MULTISIG_BRANCH), KeychainKind.EXTERNAL)
+                    .policyPath(branchPath(KeychainKind.INTERNAL, MULTISIG_BRANCH), KeychainKind.INTERNAL)
+            }
+        }
+
+    private fun branchPath(
+        keychain: KeychainKind,
+        branch: ULong,
+    ): Map<String, List<ULong>> = mapOf(requireNotNull(wallet.policies(keychain)).use { it.id() } to listOf(branch))
+
+    private fun plan(
+        request: SpendRequest,
+        path: (TxBuilder) -> TxBuilder,
+    ): SpendPlan {
+        val recipient =
+            try {
+                Address(request.address, network.toBdkNetwork())
+            } catch (e: AddressParseException) {
+                throw SpendException(SpendError.INVALID_ADDRESS, e)
+            }
+        return recipient.use { address ->
+            address.scriptPubkey().use { script ->
+                buildPsbt(script, request, path).use {
+                    SpendGuard.check(it, wallet)
+                    wallet.persist(persister) // building reveals a change address
+                    planOf(it, request, address.toString(), script.toBytes())
                 }
             }
         }
+    }
 
     override suspend fun send(
         plan: SpendPlan,
         seedEntropy: ByteArray,
     ): String =
         onWallet {
+            check(vault == null) { "Vault spends need the recovery key" }
             Psbt(plan.psbtBase64).use { psbt ->
                 SpendGuard.check(psbt, wallet)
                 if (!SeedSigner.sign(wallet, psbt, seedEntropy, network)) throw SpendException(SpendError.SIGNING_FAILED)
-                val tx =
-                    try {
-                        psbt.extractTx() // also refuses an absurd fee rate
-                    } catch (e: ExtractTxException) {
-                        throw SpendException(SpendError.OTHER, e)
-                    }
-                tx.use {
-                    verifyAgainstPlan(it, psbt, plan)
-                    broadcast(it)
-                    // Record it now, so balance and history show it before the next sync.
-                    wallet.applyUnconfirmedTxs(listOf(UnconfirmedTx(it, System.currentTimeMillis().toULong() / 1000u)))
-                    wallet.persist(persister)
-                    it.computeTxid().use { txid -> txid.toString() }
-                }
+                broadcastSigned(psbt, plan) {}
             }
         }
+
+    /**
+     * Signs a 2-of-2 Vault plan with PHONE (wallet seed) and RECOVERY (typed words), checks that it
+     * really is the 2-of-2 branch with two signatures per input, then broadcasts it.
+     */
+    override suspend fun sendFromVault(
+        plan: SpendPlan,
+        phoneSeed: ByteArray,
+        recoverySeed: ByteArray,
+    ): String =
+        onWallet {
+            val config = checkNotNull(vault) { "Not a Vault pocket" }
+            Psbt(plan.psbtBase64).use { psbt ->
+                SpendGuard.check(psbt, wallet)
+                val secrets =
+                    mapOf(
+                        VaultRole.PHONE to VaultKeys.secretKey(phoneSeed, network),
+                        VaultRole.RECOVERY to VaultKeys.secretKey(recoverySeed, network),
+                    )
+                val signers =
+                    listOf("0", "1").map { branch ->
+                        Descriptor(
+                            config.descriptor(branch, secrets),
+                            network.toBdkNetworkKind(),
+                        ).use { SignersContainer.fromDescriptor(it) }
+                    }
+                val finalized =
+                    try {
+                        wallet.signWithSigners(psbt, signers)
+                    } finally {
+                        signers.forEach { it.close() }
+                    }
+                if (!finalized) throw SpendException(SpendError.SIGNING_FAILED)
+                broadcastSigned(psbt, plan) { tx -> VaultGuard.checkTwoOfTwo(tx, config.timelock.blocks) }
+            }
+        }
+
+    /** Extracts, checks against the plan (and [check]), broadcasts and records a signed PSBT. */
+    private fun broadcastSigned(
+        psbt: Psbt,
+        plan: SpendPlan,
+        check: (Transaction) -> Unit,
+    ): String {
+        val tx =
+            try {
+                psbt.extractTx() // also refuses an absurd fee rate
+            } catch (e: ExtractTxException) {
+                throw SpendException(SpendError.OTHER, e)
+            }
+        return tx.use {
+            verifyAgainstPlan(it, psbt, plan)
+            check(it)
+            broadcast(it)
+            // Record it now, so balance and history show it before the next sync.
+            wallet.applyUnconfirmedTxs(listOf(UnconfirmedTx(it, System.currentTimeMillis().toULong() / 1000u)))
+            wallet.persist(persister)
+            it.computeTxid().use { txid -> txid.toString() }
+        }
+    }
 
     /** The signed transaction must be exactly what the user reviewed. */
     private fun verifyAgainstPlan(
@@ -269,9 +342,10 @@ class BdkWallet internal constructor(
     private fun buildPsbt(
         script: Script,
         request: SpendRequest,
+        path: (TxBuilder) -> TxBuilder,
     ): Psbt =
         FeeRate.fromSatPerVb(request.feeRateSatPerVb.toULong()).use { rate ->
-            val base = SpendGuard.restrict(TxBuilder()).feeRate(rate)
+            val base = path(SpendGuard.restrict(TxBuilder()).feeRate(rate))
             val builder =
                 when (val amount = request.amount) {
                     is SendAmount.Exact -> Amount.fromSat(amount.sats.toULong()).use { base.addRecipient(script, it) }
@@ -342,6 +416,9 @@ class BdkWallet internal constructor(
 
     companion object {
         const val SPENDING_DB = "spending.sqlite"
+
+        /** Index of the 2-of-2 branch in the Vault's `or_d` (1 is the heir branch). */
+        private const val MULTISIG_BRANCH = 0uL
         const val VAULT_DB = "vault.sqlite"
 
         /**

@@ -33,10 +33,11 @@ data class Receive(
     val vault: Boolean = false,
 ) : NavKey
 
-/** Send from Spending; [toVault] pre-fills a Vault address ("Move to Vault"). */
+/** Send from Spending ([toVault] pre-fills a Vault address, "Move to Vault"), or from the Vault. */
 @Serializable
 data class Send(
     val toVault: Boolean = false,
+    val fromVault: Boolean = false,
 ) : NavKey
 
 @Serializable
