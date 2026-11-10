@@ -102,6 +102,7 @@ class HomeViewModelTest {
 
         assertEquals(Balance(70_000, 0), vm.state.value.vaultBalance)
         assertEquals(1, vault.syncs)
+        assertEquals(vault.heartbeat, vm.state.value.vaultHeartbeat)
     }
 
     @Test

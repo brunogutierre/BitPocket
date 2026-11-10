@@ -304,7 +304,7 @@ class SendViewModelTest {
         val words = Bip39.toWords(recoveryEntropy).joinToString(" ")
         pocket.plans += plan
         access.seedOutcomes += SeedOutcome.Seed(ByteArray(16) { 1 })
-        val vm = SendViewModel(pocket, access, null, WalletSettings(), null, recoveryKey, main.dispatcher)
+        val vm = SendViewModel(pocket, access, null, WalletSettings(), null, recoveryKey, workDispatcher = main.dispatcher)
         vm.onAddressChange(ADDRESS)
         vm.onAmountChange("10000")
         vm.review()
@@ -324,6 +324,15 @@ class SendViewModelTest {
         assertEquals(SendStage.DONE, vm.state.value.stage)
         assertEquals(listOf(1.toByte() to 2.toByte()), pocket.vaultSends)
         assertTrue(pocket.sentWith.isEmpty(), "never the single-key path")
+    }
+
+    @Test
+    fun `the Vault refresh starts with send everything to the prefilled address`() {
+        val vm = SendViewModel(pocket, access, null, WalletSettings(), { ADDRESS }, "key", true, main.dispatcher)
+
+        assertTrue(vm.state.value.sendMax)
+        assertEquals(ADDRESS, vm.state.value.addressText)
+        assertTrue(vm.isVault)
     }
 
     private companion object {

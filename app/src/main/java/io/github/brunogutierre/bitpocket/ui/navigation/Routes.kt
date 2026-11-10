@@ -38,6 +38,8 @@ data class Receive(
 data class Send(
     val toVault: Boolean = false,
     val fromVault: Boolean = false,
+    /** Vault heartbeat: send every Vault coin to a new Vault address, restarting the heir timelock. */
+    val refreshVault: Boolean = false,
 ) : NavKey
 
 @Serializable
