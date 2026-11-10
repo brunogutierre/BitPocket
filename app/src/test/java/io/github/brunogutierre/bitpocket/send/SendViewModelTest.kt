@@ -24,6 +24,7 @@ import io.github.brunogutierre.bitpocket.core.settings.ScheduledGuardrails
 import io.github.brunogutierre.bitpocket.core.settings.WalletSettings
 import io.github.brunogutierre.bitpocket.core.vault.VaultKeys
 import io.github.brunogutierre.bitpocket.core.wallet.ChainUnavailableException
+import io.github.brunogutierre.bitpocket.core.wallet.Coin
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -333,6 +334,34 @@ class SendViewModelTest {
         assertTrue(vm.state.value.sendMax)
         assertEquals(ADDRESS, vm.state.value.addressText)
         assertTrue(vm.isVault)
+    }
+
+    @Test
+    fun `hand-picked coins go into the spend request`() {
+        pocket.coinList =
+            listOf(
+                Coin("a".repeat(64) + ":0", 9_000, 3, frozen = false),
+                Coin("b".repeat(64) + ":1", 5_000, 3, frozen = true),
+                Coin("c".repeat(64) + ":0", 4_000, 0, frozen = false),
+            )
+        pocket.plans += plan
+        val vm = SendViewModel(pocket)
+        vm.onAddressChange(ADDRESS)
+        vm.onAmountChange("1000")
+
+        vm.chooseCoins()
+        assertEquals(SendStage.COINS, vm.state.value.stage)
+        assertEquals(
+            listOf(9_000L),
+            vm.state.value.availableCoins
+                .map { it.sats },
+            "frozen and pending coins cannot be picked",
+        )
+        vm.toggleCoin("a".repeat(64) + ":0")
+        vm.doneChoosingCoins()
+        vm.review()
+
+        assertEquals(listOf("a".repeat(64) + ":0"), pocket.lastSpendRequest!!.coins)
     }
 
     private companion object {

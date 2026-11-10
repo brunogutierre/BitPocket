@@ -25,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
@@ -53,6 +54,7 @@ import io.github.brunogutierre.bitpocket.ui.components.PageScaffold
 import io.github.brunogutierre.bitpocket.ui.components.PrimaryButton
 import io.github.brunogutierre.bitpocket.ui.components.SecondaryButton
 import io.github.brunogutierre.bitpocket.ui.components.WarningBanner
+import io.github.brunogutierre.bitpocket.ui.settings.coinStatus
 import io.github.brunogutierre.bitpocket.ui.theme.Spacing
 import io.github.brunogutierre.bitpocket.ui.theme.monoTypography
 
@@ -68,6 +70,7 @@ fun SendScreen(
         SendStage.EDIT -> EditStage(viewModel, state, onBack)
         SendStage.SCAN -> ScanStage(onScanned = viewModel::onScanned, onCancel = viewModel::cancelScan)
         SendStage.RECOVERY -> RecoveryStage(viewModel, state)
+        SendStage.COINS -> CoinsStage(viewModel, state)
         SendStage.REVIEW -> state.plan?.let { ReviewStage(viewModel, state, it) }
         SendStage.AUTH_BIOMETRIC -> BiometricStage(viewModel, biometricOpener)
         SendStage.AUTH_PIN -> PinStage(viewModel, state)
@@ -130,6 +133,15 @@ private fun EditStage(
             Switch(checked = state.sendMax, onCheckedChange = viewModel::onSendMaxChange)
         }
         FeeSelector(viewModel, state)
+        TextButton(onClick = viewModel::chooseCoins) {
+            Text(
+                if (state.selectedCoins.isEmpty()) {
+                    stringResource(R.string.send_coins_auto)
+                } else {
+                    pluralStringResource(R.plurals.send_coins_chosen, state.selectedCoins.size, state.selectedCoins.size)
+                },
+            )
+        }
         state.spendError?.let {
             WarningBanner(
                 stringResource(R.string.send_failed_title),
@@ -362,3 +374,35 @@ private fun pasteText(context: Context): String? =
         ?.getItemAt(0)
         ?.coerceToText(context)
         ?.toString()
+
+@Composable
+private fun CoinsStage(
+    viewModel: SendViewModel,
+    state: SendUiState,
+) {
+    BackHandler(onBack = viewModel::doneChoosingCoins)
+    PageScaffold(
+        title = stringResource(R.string.coins_title),
+        onBack = viewModel::doneChoosingCoins,
+        network = viewModel.network,
+        bottomActions = { PrimaryButton(stringResource(R.string.sign_done), onClick = viewModel::doneChoosingCoins) },
+    ) {
+        Text(stringResource(R.string.send_coins_body), style = MaterialTheme.typography.bodyMedium)
+        state.availableCoins.forEach { coin ->
+            val checked = coin.outpoint in state.selectedCoins
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier =
+                    Modifier.fillMaxWidth().toggleable(value = checked, role = Role.Checkbox, onValueChange = {
+                        viewModel.toggleCoin(coin.outpoint)
+                    }),
+            ) {
+                Checkbox(checked = checked, onCheckedChange = null)
+                Column(Modifier.padding(start = Spacing.sm)) {
+                    Text(BitcoinFormat.sats(coin.sats), style = MaterialTheme.monoTypography.amount)
+                    Text(coinStatus(coin), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+    }
+}

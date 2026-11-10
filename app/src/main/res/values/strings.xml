@@ -289,5 +289,16 @@
     <string name="server_wrong_network">This server serves another network. BitPocket only uses Signet or Testnet4.</string>
     <string name="server_unreachable">Could not reach this server, or it is not an Esplora API.</string>
     <string name="server_saved">Saved. The server is used from the next time you unlock.</string>
+    <string name="coins_title">Coins</string>
+    <string name="settings_coins_body">Freeze coins so they are never spent.</string>
+    <string name="coins_body">Every received payment is a separate coin. Frozen coins are never used to pay, for example dust sent by strangers to track you.</string>
+    <string name="coins_empty">No coins yet.</string>
+    <string name="coins_frozen">Frozen</string>
+    <string name="send_coins_auto">Coins: chosen automatically</string>
+    <plurals name="send_coins_chosen">
+        <item quantity="one">Coins: %1$d chosen</item>
+        <item quantity="other">Coins: %1$d chosen</item>
+    </plurals>
+    <string name="send_coins_body">Only these coins will pay (with \"send all\", all of them go). Paying with coins from different sources links them together.</string>
     <string name="pin_too_weak">PIN too easy to guess. Choose another one.</string>
 </resources>

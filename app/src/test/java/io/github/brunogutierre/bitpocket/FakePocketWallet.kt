@@ -123,6 +123,17 @@ class FakePocketWallet(
         return "heir-txid-${heirClaims.size}"
     }
 
+    var coinList = emptyList<io.github.brunogutierre.bitpocket.core.wallet.Coin>()
+
+    override suspend fun coins() = coinList
+
+    override suspend fun setFrozen(
+        outpoint: String,
+        frozen: Boolean,
+    ) {
+        coinList = coinList.map { if (it.outpoint == outpoint) it.copy(frozen = frozen) else it }
+    }
+
     override fun close() {
         closed = true
     }

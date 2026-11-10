@@ -225,7 +225,7 @@ class BdkWallet internal constructor(
             }
         return recipient.use { address ->
             address.scriptPubkey().use { script ->
-                buildPsbt(script, request, sweep, path).use {
+                buildPsbt(script, request, sweep ?: request.coins?.map(::outPointOf), path).use {
                     SpendGuard.check(it, wallet)
                     wallet.persist(persister) // building reveals a change address
                     planOf(it, request, address.toString(), script.toBytes())
@@ -296,6 +296,41 @@ class BdkWallet internal constructor(
                 }
             Heartbeat.of(wallet.latestCheckpoint().height.toInt(), heights, config.timelock.blocks)
         }
+
+    override suspend fun coins(): List<Coin> =
+        onWallet {
+            val tip = wallet.latestCheckpoint().height.toInt()
+            wallet
+                .listUnspent()
+                .map { utxo ->
+                    Coin(
+                        outpoint = "${utxo.outpoint.txid}:${utxo.outpoint.vout}",
+                        sats =
+                            utxo.txout.value
+                                .toSat()
+                                .toLong(),
+                        confirmations = confirmationsOf(utxo.chainPosition, tip),
+                        frozen = wallet.isOutpointLocked(utxo.outpoint),
+                    )
+                }.sortedByDescending { it.sats }
+        }
+
+    override suspend fun setFrozen(
+        outpoint: String,
+        frozen: Boolean,
+    ) = onWallet {
+        val point = outPointOf(outpoint)
+        if (frozen) wallet.lockOutpoint(point) else wallet.unlockOutpoint(point)
+        wallet.persist(persister)
+        Unit
+    }
+
+    private fun outPointOf(text: String): OutPoint {
+        val txid = text.substringBeforeLast(':')
+        val vout = text.substringAfterLast(':').toUIntOrNull()
+        require(vout != null && txid.length == 64) { "Not an outpoint: $text" }
+        return OutPoint(Txid.fromString(txid), vout)
+    }
 
     override suspend fun heirCoins(): List<HeirCoin> =
         onWallet {
@@ -436,7 +471,7 @@ class BdkWallet internal constructor(
         }
     }
 
-    /** [sweep]: spend exactly these coins, everything to [script] (heir claim). */
+    /** [sweep]: spend exactly these coins (heir claim, coin control); Max then sends all of them. */
     private fun buildPsbt(
         script: Script,
         request: SpendRequest,

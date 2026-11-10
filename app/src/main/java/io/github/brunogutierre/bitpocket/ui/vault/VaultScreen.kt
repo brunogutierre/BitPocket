@@ -33,6 +33,7 @@ fun VaultScreen(
     onMoveIn: () -> Unit,
     onSend: () -> Unit,
     onRefresh: () -> Unit,
+    onCoins: () -> Unit,
     onTransaction: (txid: String) -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -47,6 +48,7 @@ fun VaultScreen(
                 PrimaryButton(stringResource(R.string.home_send), onClick = onSend, modifier = Modifier.weight(1f))
             }
             SecondaryButton(stringResource(R.string.vault_move_in), onClick = onMoveIn)
+            SecondaryButton(stringResource(R.string.coins_title), onClick = onCoins)
         },
     ) {
         Text(

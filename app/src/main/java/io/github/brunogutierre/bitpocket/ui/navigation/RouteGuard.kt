@@ -17,7 +17,7 @@ fun guardRoute(
     return when (route) {
         Home, Settings, ChangePin, GuardrailsSettings, DuressSettings, ServerSettings, VaultHome -> if (unlocked) route else home
         ClaimInheritance -> route
-        is Receive, is Send, is TransactionDetails, is VaultSetup -> if (unlocked) route else home
+        is Receive, is Send, is TransactionDetails, is VaultSetup, is Coins -> if (unlocked) route else home
         Lock -> if (walletExists) Lock else Welcome
         Welcome, RestoreSeed -> if (walletExists) Lock else route
         CreateSeed, VerifySeed -> if (!walletExists && draftWords) route else home

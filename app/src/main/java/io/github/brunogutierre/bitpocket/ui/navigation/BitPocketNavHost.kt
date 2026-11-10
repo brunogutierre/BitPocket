@@ -29,6 +29,7 @@ import io.github.brunogutierre.bitpocket.onboarding.WelcomeViewModel
 import io.github.brunogutierre.bitpocket.receive.ReceiveViewModel
 import io.github.brunogutierre.bitpocket.send.SendViewModel
 import io.github.brunogutierre.bitpocket.settings.ChangePinViewModel
+import io.github.brunogutierre.bitpocket.settings.CoinsViewModel
 import io.github.brunogutierre.bitpocket.settings.DuressViewModel
 import io.github.brunogutierre.bitpocket.settings.GuardrailsViewModel
 import io.github.brunogutierre.bitpocket.settings.ServerViewModel
@@ -45,6 +46,7 @@ import io.github.brunogutierre.bitpocket.ui.onboarding.WelcomeScreen
 import io.github.brunogutierre.bitpocket.ui.receive.ReceiveScreen
 import io.github.brunogutierre.bitpocket.ui.send.SendScreen
 import io.github.brunogutierre.bitpocket.ui.settings.ChangePinScreen
+import io.github.brunogutierre.bitpocket.ui.settings.CoinsScreen
 import io.github.brunogutierre.bitpocket.ui.settings.DuressScreen
 import io.github.brunogutierre.bitpocket.ui.settings.GuardrailsScreen
 import io.github.brunogutierre.bitpocket.ui.settings.ServerScreen
@@ -194,6 +196,7 @@ fun BitPocketNavHost(
                             onMoveIn = { backStack.add(Send(toVault = true)) },
                             onSend = { backStack.add(Send(fromVault = true)) },
                             onRefresh = { backStack.add(Send(refreshVault = true)) },
+                            onCoins = { backStack.add(Coins(vault = true)) },
                             onTransaction = { txid -> backStack.add(TransactionDetails(txid, vault = true)) },
                         )
                     }
@@ -238,6 +241,7 @@ fun BitPocketNavHost(
                         onGuardrails = { backStack.add(GuardrailsSettings) },
                         onDuress = { backStack.add(DuressSettings) },
                         onServer = { backStack.add(ServerSettings) },
+                        onCoins = { backStack.add(Coins()) },
                         onSetUpVault = { backStack.add(VaultSetup(importing = false)) },
                         onImportVault = { backStack.add(VaultSetup(importing = true)) },
                         onClaimInheritance = { backStack.add(ClaimInheritance) },
@@ -279,6 +283,11 @@ fun BitPocketNavHost(
                         viewModel { ServerViewModel(container.walletAccess, container.session, container::checkServer) },
                         onBack = back,
                     )
+                }
+                entry<Coins> { route ->
+                    val wallet = container.session.wallet
+                    val pocket = if (route.vault) wallet?.vault else wallet?.spending
+                    if (pocket != null) CoinsScreen(viewModel { CoinsViewModel(pocket) }, onBack = back)
                 }
                 entry<ChangePin> {
                     ChangePinScreen(viewModel { ChangePinViewModel(container.walletAccess) }, onBack = back, onChanged = back)

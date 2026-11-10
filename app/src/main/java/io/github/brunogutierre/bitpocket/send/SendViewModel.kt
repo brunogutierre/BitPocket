@@ -31,6 +31,7 @@ import io.github.brunogutierre.bitpocket.core.settings.GuardrailsPolicy
 import io.github.brunogutierre.bitpocket.core.settings.WalletSettings
 import io.github.brunogutierre.bitpocket.core.vault.VaultKeys
 import io.github.brunogutierre.bitpocket.core.wallet.ChainUnavailableException
+import io.github.brunogutierre.bitpocket.core.wallet.Coin
 import io.github.brunogutierre.bitpocket.core.wallet.PocketWallet
 import io.github.brunogutierre.bitpocket.core.wallet.VaultPort
 import io.github.brunogutierre.bitpocket.security.LockoutCountdown
@@ -54,6 +55,9 @@ enum class SendStage {
 
     /** Vault spends: the recovery words are typed to co-sign (ADR 0007). */
     RECOVERY,
+
+    /** Coin control: choose which coins pay. */
+    COINS,
     REVIEW,
 
     /** The screen shows BiometricPrompt and reports back through [SendViewModel.onBiometricResult]. */
@@ -94,6 +98,9 @@ data class SendUiState(
     val broadcastFailed: Boolean = false,
     val txid: String? = null,
     val recoveryText: String = "",
+    /** Coins the user can pick (confirmed, not frozen), and the picked ones; empty = automatic. */
+    val availableCoins: List<Coin> = emptyList(),
+    val selectedCoins: Set<String> = emptySet(),
     /** The typed recovery words are not a valid phrase, or not this Vault's recovery key. */
     val recoveryError: Boolean = false,
 ) {
@@ -181,6 +188,31 @@ class SendViewModel(
 
     fun startScan() = _state.update { it.copy(stage = SendStage.SCAN) }
 
+    fun chooseCoins() {
+        viewModelScope.launch {
+            val usable = pocket.coins().filter { !it.frozen && it.confirmations > 0 }
+            _state.update { it.copy(stage = SendStage.COINS, availableCoins = usable) }
+        }
+    }
+
+    fun toggleCoin(outpoint: String) =
+        _state.update {
+            it.copy(
+                selectedCoins =
+                    if (outpoint in
+                        it.selectedCoins
+                    ) {
+                        it.selectedCoins - outpoint
+                    } else {
+                        it.selectedCoins + outpoint
+                    },
+                spendError = null,
+            )
+        }
+
+    /** Back to the form with the selection (empty = let the wallet choose). */
+    fun doneChoosingCoins() = _state.update { it.copy(stage = SendStage.EDIT) }
+
     fun cancelScan() = _state.update { it.copy(stage = SendStage.EDIT) }
 
     /** A scanned QR fills the recipient (and an empty amount, for a BIP21 link with one). */
@@ -213,7 +245,7 @@ class SendViewModel(
         _state.update { it.copy(planning = true, spendError = null) }
         viewModelScope.launch {
             try {
-                val request = SpendRequest(address, sendAmount, feeRate)
+                val request = SpendRequest(address, sendAmount, feeRate, current.selectedCoins.toList().ifEmpty { null })
                 val plan = vault?.planVaultSpend(request) ?: pocket.planSpend(request)
                 val stats = pocket.spendingStats(Guardrails.WINDOW_BLOCKS)
                 // The Vault already needs the offline recovery key: guardrails apply to Spending only.

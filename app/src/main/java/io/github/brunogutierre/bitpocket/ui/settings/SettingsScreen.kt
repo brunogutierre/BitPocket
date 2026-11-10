@@ -60,6 +60,7 @@ fun SettingsScreen(
     onGuardrails: () -> Unit,
     onDuress: () -> Unit,
     onServer: () -> Unit,
+    onCoins: () -> Unit,
     onSetUpVault: () -> Unit,
     onImportVault: () -> Unit,
     onClaimInheritance: () -> Unit,
@@ -90,6 +91,7 @@ fun SettingsScreen(
                 onGuardrails,
                 onDuress,
                 onServer,
+                onCoins,
                 VaultActions(onSetUpVault, onImportVault, vaultBackup, onClaimInheritance),
                 onLock,
             )
@@ -106,6 +108,7 @@ private fun SettingsList(
     onGuardrails: () -> Unit,
     onDuress: () -> Unit,
     onServer: () -> Unit,
+    onCoins: () -> Unit,
     vault: VaultActions,
     onLock: () -> Unit,
 ) {
@@ -166,6 +169,7 @@ private fun SettingsList(
             HorizontalDivider()
             SectionTitle(stringResource(R.string.settings_privacy))
             Entry(stringResource(R.string.server_title), stringResource(R.string.settings_server_body), onServer)
+            Entry(stringResource(R.string.coins_title), stringResource(R.string.settings_coins_body), onCoins)
             HorizontalDivider()
             SectionTitle(stringResource(R.string.settings_about))
             ListItem(
