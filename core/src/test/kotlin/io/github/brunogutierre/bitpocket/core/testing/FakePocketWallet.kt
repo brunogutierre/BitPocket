@@ -50,6 +50,19 @@ class FakePocketWallet(
         return plans.removeFirstOrNull() ?: throw SpendException(SpendError.INSUFFICIENT_FUNDS)
     }
 
+    /** Seeds passed to [send] (copied, since callers wipe theirs); [sendError] fails the send. */
+    val sentWith = mutableListOf<ByteArray>()
+    var sendError: Exception? = null
+
+    override suspend fun send(
+        plan: SpendPlan,
+        seedEntropy: ByteArray,
+    ): String {
+        sendError?.let { throw it }
+        sentWith += seedEntropy.copyOf()
+        return "txid-${sentWith.size}"
+    }
+
     override fun close() {
         closed = true
     }
@@ -58,10 +71,14 @@ class FakePocketWallet(
 /** Opens a [FakePocketWallet] per unlock (or fails when [failure] is set). */
 class FakeWalletOpener : WalletOpener {
     val opened = mutableListOf<FakePocketWallet>()
+
+    /** The payloads it was given (the same objects, so tests can check they were wiped). */
+    val payloads = mutableListOf<SlotPayload>()
     var failure: Exception? = null
 
     override fun open(payload: SlotPayload): FakePocketWallet {
         failure?.let { throw it }
+        payloads += payload
         return FakePocketWallet(payload.network).also { opened += it }
     }
 }

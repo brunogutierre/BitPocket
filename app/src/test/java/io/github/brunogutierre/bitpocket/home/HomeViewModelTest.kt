@@ -80,6 +80,17 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun `reload shows local changes without syncing`() {
+        val vm = vm()
+        pocket.balance = Balance(7, 0)
+
+        vm.reload()
+
+        assertEquals(Balance(7, 0), vm.state.value.balance)
+        assertEquals(1, pocket.syncs)
+    }
+
+    @Test
     fun `lock locks the session`() {
         vm().lock()
 

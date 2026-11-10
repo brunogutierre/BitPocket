@@ -41,6 +41,15 @@ enum class SpendError {
 
     /** The guard found an input that is not a confirmed coin of this wallet. */
     UNSAFE_INPUT,
+
+    /** The seed did not finalize every input (it is not this wallet's seed). */
+    SIGNING_FAILED,
+
+    /** The signed transaction does not match the reviewed plan; nothing was broadcast. */
+    PLAN_MISMATCH,
+
+    /** The network refused the transaction (e.g. its coins were already spent). */
+    REJECTED,
     OTHER,
 }
 
@@ -49,7 +58,17 @@ class SpendException(
     cause: Throwable? = null,
 ) : Exception(error.name, cause)
 
-/** Builds spends of a pocket. Throws [SpendException]. */
+/** Builds and sends spends of a pocket. Throws [SpendException]. */
 interface SpendPort {
     suspend fun planSpend(request: SpendRequest): SpendPlan
+
+    /**
+     * Signs [plan] with [seedEntropy] (the caller wipes it), checks the signed transaction against
+     * the plan, broadcasts it and records it as pending. Returns the txid.
+     * Throws `ChainUnavailableException` when the backend cannot be reached (nothing was sent).
+     */
+    suspend fun send(
+        plan: SpendPlan,
+        seedEntropy: ByteArray,
+    ): String
 }

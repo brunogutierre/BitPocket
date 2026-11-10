@@ -25,6 +25,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.brunogutierre.bitpocket.R
+import io.github.brunogutierre.bitpocket.biometric.BiometricSeedOpener
 import io.github.brunogutierre.bitpocket.core.format.BitcoinFormat
 import io.github.brunogutierre.bitpocket.core.send.AmountError
 import io.github.brunogutierre.bitpocket.core.send.AmountParser
@@ -47,12 +48,18 @@ import io.github.brunogutierre.bitpocket.ui.theme.monoTypography
 @Composable
 fun SendScreen(
     viewModel: SendViewModel,
+    biometricOpener: BiometricSeedOpener,
     onBack: () -> Unit,
+    onDone: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     when (state.stage) {
         SendStage.EDIT -> EditStage(viewModel, state, onBack)
-        SendStage.REVIEW -> state.plan?.let { ReviewStage(viewModel, it) }
+        SendStage.REVIEW -> state.plan?.let { ReviewStage(viewModel, state, it) }
+        SendStage.AUTH_BIOMETRIC -> BiometricStage(viewModel, biometricOpener)
+        SendStage.AUTH_PIN -> PinStage(viewModel, state)
+        SendStage.SENDING -> SendingStage()
+        SendStage.DONE -> DoneStage(state, onDone)
     }
 }
 
@@ -155,6 +162,7 @@ private fun FeeSelector(
 @Composable
 private fun ReviewStage(
     viewModel: SendViewModel,
+    state: SendUiState,
     plan: SpendPlan,
 ) {
     BackHandler(onBack = viewModel::edit)
@@ -163,8 +171,7 @@ private fun ReviewStage(
         onBack = viewModel::edit,
         network = viewModel.network,
         bottomActions = {
-            // Signing and broadcasting arrive with the biometric/PIN authentication.
-            PrimaryButton(stringResource(R.string.send_confirm), onClick = {}, enabled = false)
+            PrimaryButton(stringResource(R.string.send_confirm), onClick = viewModel::confirm)
             SecondaryButton(stringResource(R.string.send_edit), onClick = viewModel::edit)
         },
     ) {
@@ -181,7 +188,23 @@ private fun ReviewStage(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        WarningBanner(stringResource(R.string.send_review_check_title), stringResource(R.string.send_review_check_body))
+        when {
+            state.broadcastFailed -> {
+                WarningBanner(
+                    stringResource(R.string.send_failed_title),
+                    stringResource(R.string.sign_broadcast_failed),
+                    severity = BannerSeverity.ERROR,
+                )
+            }
+
+            state.spendError != null -> {
+                WarningBanner(stringResource(R.string.send_failed_title), spendErrorText(state.spendError), severity = BannerSeverity.ERROR)
+            }
+
+            else -> {
+                WarningBanner(stringResource(R.string.send_review_check_title), stringResource(R.string.send_review_check_body))
+            }
+        }
     }
 }
 
@@ -230,8 +253,25 @@ private fun amountErrorText(error: AmountError): String =
 @Composable
 private fun spendErrorText(error: SpendError): String =
     when (error) {
-        SpendError.INSUFFICIENT_FUNDS -> stringResource(R.string.send_error_insufficient)
-        SpendError.BELOW_DUST -> dustText()
-        SpendError.INVALID_ADDRESS -> stringResource(R.string.send_error_not_an_address)
-        SpendError.UNSAFE_INPUT, SpendError.OTHER -> stringResource(R.string.send_error_other)
+        SpendError.INSUFFICIENT_FUNDS -> {
+            stringResource(R.string.send_error_insufficient)
+        }
+
+        SpendError.BELOW_DUST -> {
+            dustText()
+        }
+
+        SpendError.INVALID_ADDRESS -> {
+            stringResource(R.string.send_error_not_an_address)
+        }
+
+        SpendError.REJECTED -> {
+            stringResource(R.string.send_error_rejected)
+        }
+
+        SpendError.UNSAFE_INPUT, SpendError.SIGNING_FAILED, SpendError.PLAN_MISMATCH, SpendError.OTHER -> {
+            stringResource(
+                R.string.send_error_other,
+            )
+        }
     }

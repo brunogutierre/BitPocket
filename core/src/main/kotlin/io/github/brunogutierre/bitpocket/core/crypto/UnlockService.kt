@@ -33,8 +33,16 @@ class UnlockService(
     private val clock: UnlockClock,
     private val backoff: BackoffPolicy = BackoffPolicy(),
 ) {
-    /** @throws AuthenticationFailedException if the PIN is right but the payload was tampered with. */
-    fun unlock(pin: CharArray): UnlockResult {
+    /**
+     * @param expected when set (re-authenticating inside a session), a PIN that opens ANOTHER slot
+     *   counts as a wrong PIN: the failure stays recorded and nothing is decrypted, so the result
+     *   (and the backoff) never reveals that the PIN opens something else.
+     * @throws AuthenticationFailedException if the PIN is right but the payload was tampered with.
+     */
+    fun unlock(
+        pin: CharArray,
+        expected: SlotId? = null,
+    ): UnlockResult {
         val now = clock.now()
         val state = attempts.read()
         val remaining = backoff.remaining(state, now)
@@ -50,7 +58,7 @@ class UnlockService(
         val deks = SlotId.entries.associateWith { slots.openDek(it, files[it], pin) }
         try {
             val (slot, dek) =
-                deks.entries.firstOrNull { it.value != null }
+                deks.entries.firstOrNull { it.value != null && (expected == null || it.key == expected) }
                     ?: return UnlockResult.Wrong(Duration.ofMillis(pessimistic.lockoutRemainingMs))
             val payload = slots.openPayload(slot, files.getValue(slot)!!, dek!!)
             attempts.write(AttemptsState.NONE)

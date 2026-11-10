@@ -11,6 +11,7 @@ import org.bitcoindevkit.Descriptor
 import org.bitcoindevkit.EsploraException
 import org.bitcoindevkit.FullScanRequest
 import org.bitcoindevkit.SyncRequest
+import org.bitcoindevkit.Transaction
 import org.bitcoindevkit.Update
 import org.bitcoindevkit.Wallet
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -195,6 +196,15 @@ class FakeChainClient : ChainClient {
     }
 
     var estimates: Map<Int, Double>? = null
+
+    /** Txids of broadcast transactions (the wallet closes the native objects afterwards). */
+    val broadcasts = mutableListOf<String>()
+    var broadcastError: Exception? = null
+
+    override fun broadcast(transaction: Transaction) {
+        broadcastError?.let { throw it }
+        broadcasts += transaction.computeTxid().toString()
+    }
 
     override fun feeEstimates(): Map<Int, Double> = estimates ?: throw java.io.IOException("offline")
 
