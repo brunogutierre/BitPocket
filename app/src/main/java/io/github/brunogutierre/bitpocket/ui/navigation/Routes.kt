@@ -34,6 +34,12 @@ data object Receive : NavKey
 data object Send : NavKey
 
 @Serializable
+data object Settings : NavKey
+
+@Serializable
+data object ChangePin : NavKey
+
+@Serializable
 data class TransactionDetails(
     val txid: String,
 ) : NavKey

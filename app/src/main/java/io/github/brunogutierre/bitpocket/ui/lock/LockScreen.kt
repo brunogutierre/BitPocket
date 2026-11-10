@@ -23,6 +23,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.brunogutierre.bitpocket.R
 import io.github.brunogutierre.bitpocket.lock.LockViewModel
 import io.github.brunogutierre.bitpocket.ui.components.PinPad
+import io.github.brunogutierre.bitpocket.ui.components.formatCountdown
 import io.github.brunogutierre.bitpocket.ui.theme.Spacing
 import io.github.brunogutierre.bitpocket.ui.theme.screenHorizontalPadding
 
@@ -74,5 +75,3 @@ fun LockScreen(
         }
     }
 }
-
-private fun formatCountdown(seconds: Long) = "%d:%02d".format(seconds / 60, seconds % 60)

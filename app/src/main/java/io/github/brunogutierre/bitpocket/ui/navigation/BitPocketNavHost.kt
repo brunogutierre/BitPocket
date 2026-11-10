@@ -28,6 +28,8 @@ import io.github.brunogutierre.bitpocket.onboarding.VerifySeedViewModel
 import io.github.brunogutierre.bitpocket.onboarding.WelcomeViewModel
 import io.github.brunogutierre.bitpocket.receive.ReceiveViewModel
 import io.github.brunogutierre.bitpocket.send.SendViewModel
+import io.github.brunogutierre.bitpocket.settings.ChangePinViewModel
+import io.github.brunogutierre.bitpocket.settings.SettingsViewModel
 import io.github.brunogutierre.bitpocket.ui.components.SecureScreen
 import io.github.brunogutierre.bitpocket.ui.history.TransactionDetailsScreen
 import io.github.brunogutierre.bitpocket.ui.home.HomeScreen
@@ -39,6 +41,8 @@ import io.github.brunogutierre.bitpocket.ui.onboarding.VerifySeedScreen
 import io.github.brunogutierre.bitpocket.ui.onboarding.WelcomeScreen
 import io.github.brunogutierre.bitpocket.ui.receive.ReceiveScreen
 import io.github.brunogutierre.bitpocket.ui.send.SendScreen
+import io.github.brunogutierre.bitpocket.ui.settings.ChangePinScreen
+import io.github.brunogutierre.bitpocket.ui.settings.SettingsScreen
 
 private const val NAV_DURATION_MS = 300
 
@@ -140,6 +144,7 @@ fun BitPocketNavHost(
                             viewModel { HomeViewModel(wallet.spending, container.session::lock) },
                             onReceive = { backStack.add(Receive) },
                             onSend = { backStack.add(Send) },
+                            onSettings = { backStack.add(Settings) },
                             onTransaction = { txid -> backStack.add(TransactionDetails(txid)) },
                             onLocked = { resetTo(Lock) },
                         )
@@ -159,6 +164,24 @@ fun BitPocketNavHost(
                             onDone = back,
                         )
                     }
+                }
+                entry<Settings> {
+                    SettingsScreen(
+                        viewModel {
+                            SettingsViewModel(container.walletAccess, container.session, container.biometricAvailable(), container::wipeAll)
+                        },
+                        seedCipher = container.seedCipher,
+                        onBack = back,
+                        onChangePin = { backStack.add(ChangePin) },
+                        onLock = {
+                            container.session.lock()
+                            resetTo(Lock)
+                        },
+                        onWiped = { resetTo(Welcome) },
+                    )
+                }
+                entry<ChangePin> {
+                    ChangePinScreen(viewModel { ChangePinViewModel(container.walletAccess) }, onBack = back, onChanged = back)
                 }
                 entry<TransactionDetails> { route ->
                     val wallet = container.session.wallet

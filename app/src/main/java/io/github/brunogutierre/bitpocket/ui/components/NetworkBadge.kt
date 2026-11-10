@@ -66,10 +66,12 @@ fun BitPocketTopBar(
     title: String,
     network: SupportedNetwork,
     modifier: Modifier = Modifier,
+    navigationIcon: @Composable () -> Unit = {},
 ) {
     Column(modifier) {
         CenterAlignedTopAppBar(
             title = { Text(title, style = MaterialTheme.typography.titleLarge) },
+            navigationIcon = navigationIcon,
             actions = { NetworkBadge(network, Modifier.padding(end = Spacing.lg)) },
         )
         Box(Modifier.fillMaxWidth().height(2.dp).background(MaterialTheme.colorScheme.tertiary))

@@ -31,6 +31,13 @@ class Session {
         this.wallet = wallet
     }
 
+    /** Biometric signing was turned on or off: same pockets, new sealed seed (or none). */
+    fun updateBiometricSeed(blob: ByteArray?) {
+        val current = wallet ?: return
+        current.biometricSeed?.wipe()
+        wallet = UnlockedWallet(current.slot, current.network, blob, current.spending)
+    }
+
     fun lock() {
         val current = wallet ?: return
         wallet = null

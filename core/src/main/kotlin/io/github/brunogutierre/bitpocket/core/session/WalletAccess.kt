@@ -8,9 +8,12 @@ import io.github.brunogutierre.bitpocket.core.crypto.UnlockResult
 import io.github.brunogutierre.bitpocket.core.crypto.UnlockService
 import io.github.brunogutierre.bitpocket.core.crypto.wipe
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
+import io.github.brunogutierre.bitpocket.core.seed.BiometricRewrap
+import io.github.brunogutierre.bitpocket.core.seed.BiometricSeedVault
 import io.github.brunogutierre.bitpocket.core.seed.SlotPayload
 import io.github.brunogutierre.bitpocket.core.wallet.WalletOpener
 import java.time.Duration
+import kotlin.coroutines.cancellation.CancellationException
 
 sealed interface UnlockOutcome {
     data object Unlocked : UnlockOutcome
@@ -46,6 +49,22 @@ sealed interface SeedOutcome {
     data object Failed : SeedOutcome
 }
 
+/** Result of a settings change that re-enters the PIN. */
+sealed interface SettingsOutcome {
+    data object Done : SettingsOutcome
+
+    data class WrongPin(
+        val lockout: Duration,
+    ) : SettingsOutcome
+
+    data class LockedOut(
+        val remaining: Duration,
+    ) : SettingsOutcome
+
+    /** Keystore/storage error, or the biometric sealing was cancelled. */
+    data object Failed : SettingsOutcome
+}
+
 /** Creates the wallet and unlocks it into the [Session]. Blocking and slow: call off the main thread. */
 interface WalletAccess {
     fun create(
@@ -61,6 +80,24 @@ interface WalletAccess {
      * backoff as unlocking, and a PIN of another slot is just a wrong PIN.
      */
     fun seedForSigning(pin: CharArray): SeedOutcome
+
+    /** Re-encrypts the slot under [newPin] after checking [currentPin]. */
+    fun changePin(
+        currentPin: CharArray,
+        newPin: CharArray,
+    ): SettingsOutcome
+
+    /**
+     * Turns biometric signing on (a new biometric key seals the seed; [vault] shows the prompt) or
+     * off ([vault] null). Either way the slot is saved again under [pin].
+     */
+    suspend fun setBiometricSigning(
+        pin: CharArray,
+        vault: BiometricSeedVault?,
+    ): SettingsOutcome
+
+    /** Checks the session PIN (e.g. before wiping) without decrypting anything for the caller. */
+    fun verifyPin(pin: CharArray): SettingsOutcome
 }
 
 /** [WalletAccess] over the slot store. M1 uses slot A only; slot B stays a decoy. */
@@ -75,14 +112,9 @@ class SlotWalletAccess(
         seedEntropy: ByteArray,
         network: SupportedNetwork,
     ) {
-        // Biometric sealing is deferred to the first send, so no biometric copy yet.
+        // Biometric signing is turned on later, in Settings, so no biometric copy yet.
         val payload = SlotPayload(seedEntropy.copyOf(), biometricSeed = null, network = network)
-        val encoded = payload.encode()
-        try {
-            slots.save(SlotId.A, pin, encoded)
-        } finally {
-            encoded.wipe()
-        }
+        save(SlotId.A, pin, payload)
         openSession(SlotId.A, payload)
     }
 
@@ -117,31 +149,140 @@ class SlotWalletAccess(
         }
     }
 
-    override fun seedForSigning(pin: CharArray): SeedOutcome {
-        val slot = session.wallet?.slot ?: return SeedOutcome.Failed
-        return try {
-            when (val result = unlockService.unlock(pin, expected = slot)) {
-                is UnlockResult.Unlocked -> seedOf(result)
-                is UnlockResult.Wrong -> SeedOutcome.WrongPin(result.lockout)
-                is UnlockResult.LockedOut -> SeedOutcome.LockedOut(result.remaining)
+    override fun seedForSigning(pin: CharArray): SeedOutcome =
+        when (val result = reauthenticate(pin)) {
+            is Reauth.Ok -> {
+                result.payload.biometricSeed?.wipe()
+                SeedOutcome.Seed(result.payload.seedEntropy)
             }
-        } catch (e: KeyUnavailableException) {
-            SeedOutcome.Failed
-        } catch (e: AuthenticationFailedException) {
-            SeedOutcome.Failed
+
+            is Reauth.Denied -> {
+                when (val outcome = result.outcome) {
+                    is SettingsOutcome.WrongPin -> SeedOutcome.WrongPin(outcome.lockout)
+                    is SettingsOutcome.LockedOut -> SeedOutcome.LockedOut(outcome.remaining)
+                    else -> SeedOutcome.Failed
+                }
+            }
+        }
+
+    override fun changePin(
+        currentPin: CharArray,
+        newPin: CharArray,
+    ): SettingsOutcome =
+        withPayload(currentPin) { slot, payload ->
+            save(slot, newPin, payload)
+            SettingsOutcome.Done
+        }
+
+    override suspend fun setBiometricSigning(
+        pin: CharArray,
+        vault: BiometricSeedVault?,
+    ): SettingsOutcome =
+        when (val result = reauthenticate(pin)) {
+            is Reauth.Denied -> {
+                result.outcome
+            }
+
+            is Reauth.Ok -> {
+                try {
+                    val saved =
+                        if (vault == null) {
+                            result.payload.withBiometricSeed(null).also { save(result.slot, pin, it) }
+                        } else {
+                            BiometricRewrap(slots, vault).rewrap(result.slot, pin, result.payload)
+                        }
+                    session.updateBiometricSeed(saved.biometricSeed?.copyOf())
+                    SettingsOutcome.Done
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // Sealing failed or was cancelled: the slot was saved without a biometric copy.
+                    session.updateBiometricSeed(null)
+                    SettingsOutcome.Failed
+                } finally {
+                    result.payload.seedEntropy.wipe()
+                }
+            }
+        }
+
+    override fun verifyPin(pin: CharArray): SettingsOutcome = withPayload(pin) { _, _ -> SettingsOutcome.Done }
+
+    private sealed interface Reauth {
+        class Ok(
+            val slot: SlotId,
+            val payload: SlotPayload,
+        ) : Reauth
+
+        class Denied(
+            val outcome: SettingsOutcome,
+        ) : Reauth
+    }
+
+    /** The session PIN, checked like an unlock (same backoff); another slot's PIN is wrong here. */
+    private fun reauthenticate(pin: CharArray): Reauth {
+        val slot = session.wallet?.slot ?: return Reauth.Denied(SettingsOutcome.Failed)
+        val result =
+            try {
+                unlockService.unlock(pin, expected = slot)
+            } catch (e: KeyUnavailableException) {
+                return Reauth.Denied(SettingsOutcome.Failed)
+            } catch (e: AuthenticationFailedException) {
+                return Reauth.Denied(SettingsOutcome.Failed)
+            }
+        return when (result) {
+            is UnlockResult.Wrong -> {
+                Reauth.Denied(SettingsOutcome.WrongPin(result.lockout))
+            }
+
+            is UnlockResult.LockedOut -> {
+                Reauth.Denied(SettingsOutcome.LockedOut(result.remaining))
+            }
+
+            is UnlockResult.Unlocked -> {
+                try {
+                    Reauth.Ok(result.slot, SlotPayload.decode(result.payload))
+                } catch (e: IllegalArgumentException) {
+                    Reauth.Denied(SettingsOutcome.Failed)
+                } finally {
+                    result.payload.wipe()
+                }
+            }
         }
     }
 
-    private fun seedOf(result: UnlockResult.Unlocked): SeedOutcome =
-        try {
-            val payload = SlotPayload.decode(result.payload)
-            payload.biometricSeed?.wipe()
-            SeedOutcome.Seed(payload.seedEntropy)
-        } catch (e: IllegalArgumentException) {
-            SeedOutcome.Failed
-        } finally {
-            result.payload.wipe()
+    /** Runs [block] with the re-authenticated payload, then wipes its seed. */
+    private fun withPayload(
+        pin: CharArray,
+        block: (SlotId, SlotPayload) -> SettingsOutcome,
+    ): SettingsOutcome =
+        when (val result = reauthenticate(pin)) {
+            is Reauth.Denied -> {
+                result.outcome
+            }
+
+            is Reauth.Ok -> {
+                try {
+                    block(result.slot, result.payload)
+                } catch (e: KeyUnavailableException) {
+                    SettingsOutcome.Failed
+                } finally {
+                    result.payload.seedEntropy.wipe()
+                }
+            }
         }
+
+    private fun save(
+        slot: SlotId,
+        pin: CharArray,
+        payload: SlotPayload,
+    ) {
+        val encoded = payload.encode()
+        try {
+            slots.save(slot, pin, encoded)
+        } finally {
+            encoded.wipe()
+        }
+    }
 
     /** Opens the pockets, then drops the seed: the session keeps public data only. */
     private fun openSession(

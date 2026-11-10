@@ -27,7 +27,8 @@ import io.github.brunogutierre.bitpocket.biometric.BiometricSeedResult
 import io.github.brunogutierre.bitpocket.send.SendUiState
 import io.github.brunogutierre.bitpocket.send.SendViewModel
 import io.github.brunogutierre.bitpocket.ui.components.PageScaffold
-import io.github.brunogutierre.bitpocket.ui.components.PinPad
+import io.github.brunogutierre.bitpocket.ui.components.PinPrompt
+import io.github.brunogutierre.bitpocket.ui.components.PinPromptStatus
 import io.github.brunogutierre.bitpocket.ui.components.PrimaryButton
 import io.github.brunogutierre.bitpocket.ui.theme.Spacing
 import io.github.brunogutierre.bitpocket.ui.theme.extendedColors
@@ -61,31 +62,24 @@ internal fun PinStage(
     viewModel: SendViewModel,
     state: SendUiState,
 ) {
-    BackHandler(onBack = viewModel::cancelAuth)
-    PageScaffold(title = stringResource(R.string.sign_pin_title), onBack = viewModel::cancelAuth, network = viewModel.network) {
-        val message =
-            when {
-                state.lockoutSeconds > 0 -> stringResource(R.string.lock_locked_out, formatCountdown(state.lockoutSeconds))
-                state.authFailed -> stringResource(R.string.lock_failed)
-                state.wrongPin -> stringResource(R.string.lock_wrong)
-                state.biometricFailure == BiometricFailure.INVALIDATED -> stringResource(R.string.sign_biometric_invalidated)
-                else -> stringResource(R.string.sign_pin_body)
-            }
-        Text(
-            message,
-            style = MaterialTheme.typography.bodyMedium,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
-        )
-        PinPad(
-            enteredCount = state.pinEntered,
-            onDigit = viewModel::pinDigit,
-            onBackspace = viewModel::pinBackspace,
-            enabled = state.pinKeysEnabled,
-            errorSignal = state.pinErrorSignal,
-            modifier = Modifier.align(Alignment.CenterHorizontally),
-        )
-    }
+    val body =
+        if (state.biometricFailure == BiometricFailure.INVALIDATED) {
+            stringResource(R.string.sign_biometric_invalidated)
+        } else {
+            stringResource(R.string.sign_pin_body)
+        }
+    PinPrompt(
+        title = stringResource(R.string.sign_pin_title),
+        body = body,
+        status = PinPromptStatus(state.lockoutSeconds, state.authFailed, state.wrongPin),
+        entered = state.pinEntered,
+        enabled = state.pinKeysEnabled,
+        errorSignal = state.pinErrorSignal,
+        onDigit = viewModel::pinDigit,
+        onBackspace = viewModel::pinBackspace,
+        onBack = viewModel::cancelAuth,
+        network = viewModel.network,
+    )
 }
 
 @Composable
@@ -131,5 +125,3 @@ private fun WaitingPage(text: String) {
         Text(text, style = MaterialTheme.typography.titleMedium)
     }
 }
-
-private fun formatCountdown(seconds: Long) = "%d:%02d".format(seconds / 60, seconds % 60)
