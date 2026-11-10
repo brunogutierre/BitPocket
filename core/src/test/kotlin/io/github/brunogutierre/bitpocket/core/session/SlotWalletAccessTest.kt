@@ -203,9 +203,12 @@ class SlotWalletAccessTest {
         assertEquals(HeirTimelock.HOUR, vault.timelock)
         listOf(entropy, recovery, heir).forEach { assertEquals(vault, VaultBackup.open(done.backup, it)!!.config) }
         assertEquals(VaultSetupOutcome.AlreadySetUp, access.setUpVault("123456".toCharArray(), recovery, heir, HeirTimelock.DAY))
+        assertSame(opener.vaults.single(), session.wallet!!.vault)
         session.lock()
+        assertTrue(opener.vaults.single().closed)
         access.unlock("123456".toCharArray())
         assertEquals(vault, session.wallet!!.settings.vault)
+        assertSame(opener.vaults.last(), session.wallet!!.vault, "unlocking opens the Vault pocket too")
     }
 
     @Test

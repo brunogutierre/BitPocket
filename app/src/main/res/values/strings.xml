@@ -227,5 +227,10 @@
     <string name="vault_error_title">Vault not changed</string>
     <string name="vault_error_exists">This wallet already has a Vault.</string>
     <string name="vault_error_not_ours">This backup belongs to another wallet or network, or the file is damaged.</string>
+    <string name="vault_title">Vault</string>
+    <string name="vault_card_set_up">Set up a second pocket that needs two keys</string>
+    <string name="vault_move_in">Move to Vault</string>
+    <string name="vault_policy_summary">Spends need this phone and the recovery words. The heir can spend alone after %1$s without movement.</string>
+    <string name="vault_empty">No Vault transactions yet. Use Move to Vault to send coins from Spending.</string>
     <string name="pin_too_weak">PIN too easy to guess. Choose another one.</string>
 </resources>

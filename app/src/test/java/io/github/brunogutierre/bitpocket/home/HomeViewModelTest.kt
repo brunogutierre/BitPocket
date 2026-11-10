@@ -20,7 +20,7 @@ class HomeViewModelTest {
     private val pocket = FakePocketWallet(SupportedNetwork.TESTNET4)
     private var locked = false
 
-    private fun vm() = HomeViewModel(pocket) { locked = true }
+    private fun vm() = HomeViewModel(pocket, lockSession = { locked = true })
 
     @Test
     fun `shows the saved balance at once, then the synced one`() {
@@ -88,6 +88,20 @@ class HomeViewModelTest {
 
         assertEquals(Balance(7, 0), vm.state.value.balance)
         assertEquals(1, pocket.syncs)
+    }
+
+    @Test
+    fun `shows and syncs the Vault once it exists`() {
+        val vault = FakePocketWallet().apply { balance = Balance(70_000, 0) }
+        var current: FakePocketWallet? = null
+        val vm = HomeViewModel(pocket, {}) { current }
+        assertEquals(null, vm.state.value.vaultBalance)
+
+        current = vault
+        vm.sync()
+
+        assertEquals(Balance(70_000, 0), vm.state.value.vaultBalance)
+        assertEquals(1, vault.syncs)
     }
 
     @Test

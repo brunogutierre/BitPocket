@@ -27,11 +27,20 @@ data object Lock : NavKey
 @Serializable
 data object Home : NavKey
 
+/** Receive into the Spending pocket, or the Vault when [vault]. */
 @Serializable
-data object Receive : NavKey
+data class Receive(
+    val vault: Boolean = false,
+) : NavKey
+
+/** Send from Spending; [toVault] pre-fills a Vault address ("Move to Vault"). */
+@Serializable
+data class Send(
+    val toVault: Boolean = false,
+) : NavKey
 
 @Serializable
-data object Send : NavKey
+data object VaultHome : NavKey
 
 @Serializable
 data object Settings : NavKey
@@ -51,6 +60,7 @@ data class VaultSetup(
 @Serializable
 data class TransactionDetails(
     val txid: String,
+    val vault: Boolean = false,
 ) : NavKey
 
 fun LaunchState.startRoute(): NavKey =

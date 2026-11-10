@@ -25,6 +25,8 @@ data class UnlockedWallet(
     val settings: WalletSettings = WalletSettings(),
     /** The wallet's directory (see `WalletOpener.dirOf`), e.g. for the Vault backup file. */
     val dir: File? = null,
+    /** The open Vault pocket, once the Vault is set up. */
+    val vault: PocketWallet? = null,
 )
 
 /** Holds the unlocked wallet in memory only; [lock] closes its pockets. */
@@ -50,6 +52,13 @@ class Session {
         state.value = current.copy(biometricSeed = blob)
     }
 
+    /** The Vault was just set up or imported: open its pocket alongside Spending. */
+    fun updateVault(vault: PocketWallet) {
+        val current = wallet ?: return vault.close()
+        current.vault?.close()
+        state.value = current.copy(vault = vault)
+    }
+
     fun updateSettings(settings: WalletSettings) {
         state.value = wallet?.copy(settings = settings) ?: return
     }
@@ -58,5 +67,6 @@ class Session {
         val current = state.getAndUpdate { null } ?: return
         current.biometricSeed?.wipe()
         current.spending.close()
+        current.vault?.close()
     }
 }

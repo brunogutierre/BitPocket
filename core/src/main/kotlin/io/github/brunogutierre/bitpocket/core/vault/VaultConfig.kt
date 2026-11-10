@@ -1,7 +1,9 @@
 package io.github.brunogutierre.bitpocket.core.vault
 
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
+import io.github.brunogutierre.bitpocket.core.wallet.PublicDescriptors
 import org.bitcoindevkit.DerivationPath
+import org.bitcoindevkit.Descriptor
 import org.bitcoindevkit.DescriptorSecretKey
 import org.bitcoindevkit.Mnemonic
 import java.nio.ByteBuffer
@@ -106,6 +108,12 @@ data class VaultConfig(
         fun key(role: VaultRole) = (secrets[role] ?: keyOf(role)) + "/$branch/*"
         return "wsh(or_d(multi(2,${key(VaultRole.PHONE)},${key(VaultRole.RECOVERY)})," +
             "and_v(v:pkh(${key(VaultRole.HEIR)}),older(${timelock.blocks}))))"
+    }
+
+    /** The watch-only receive and change descriptors (with checksums) of the Vault wallet. */
+    fun publicDescriptors(network: SupportedNetwork): PublicDescriptors {
+        fun normalized(branch: String) = Descriptor(descriptor(branch), network.toBdkNetworkKind()).use { it.toString() }
+        return PublicDescriptors(external = normalized("0"), internal = normalized("1"))
     }
 
     /** `timelock id (1) | 3 x (length (2) | key)` in PHONE, RECOVERY, HEIR order. */

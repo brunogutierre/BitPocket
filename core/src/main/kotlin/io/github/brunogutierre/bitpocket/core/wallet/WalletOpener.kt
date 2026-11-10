@@ -2,6 +2,7 @@ package io.github.brunogutierre.bitpocket.core.wallet
 
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
 import io.github.brunogutierre.bitpocket.core.seed.SlotPayload
+import io.github.brunogutierre.bitpocket.core.vault.VaultConfig
 import java.io.File
 
 /** Opens the pockets of a wallet that was just unlocked. */
@@ -10,6 +11,12 @@ interface WalletOpener {
 
     /** The wallet's own directory (databases, Vault backup), named from public data. */
     fun dirOf(payload: SlotPayload): File
+
+    /** Opens the watch-only Vault pocket described by [config], next to the Spending one. */
+    fun openVault(
+        payload: SlotPayload,
+        config: VaultConfig,
+    ): PocketWallet
 }
 
 /**
@@ -27,10 +34,24 @@ class BdkWalletOpener(
 
     override fun open(payload: SlotPayload): PocketWallet {
         val descriptors = SpendingDescriptors.fromEntropy(payload.seedEntropy, payload.network).use { it.toPublic() }
-        val dir = WalletFiles.dir(root, WalletFiles.id(payload.network, descriptors))
-        val chain = chainFor(payload.network)
+        return withChain(payload.network) { chain -> BdkWallet.open(dirOf(payload), descriptors, payload.network, chain) }
+    }
+
+    override fun openVault(
+        payload: SlotPayload,
+        config: VaultConfig,
+    ): PocketWallet =
+        withChain(payload.network) { chain ->
+            BdkWallet.open(dirOf(payload), config.publicDescriptors(payload.network), payload.network, chain, vault = config)
+        }
+
+    private fun withChain(
+        network: SupportedNetwork,
+        open: (ChainClient) -> PocketWallet,
+    ): PocketWallet {
+        val chain = chainFor(network)
         return try {
-            BdkWallet.open(dir, descriptors, payload.network, chain)
+            open(chain)
         } catch (e: Exception) {
             chain.close()
             throw e
