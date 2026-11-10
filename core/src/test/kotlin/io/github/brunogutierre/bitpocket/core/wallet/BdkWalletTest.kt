@@ -144,7 +144,7 @@ class BdkWalletTest {
     @Test
     fun `the opener derives the wallet directory from public data`() =
         runTest {
-            val opener = BdkWalletOpener(dir) { chain }
+            val opener = BdkWalletOpener(dir) { _, _ -> chain }
             val payload = SlotPayload(ByteArray(16), biometricSeed = null, network = network)
 
             opener.open(payload).use { wallet ->
@@ -164,7 +164,7 @@ class BdkWalletTest {
                     io.github.brunogutierre.bitpocket.core.spike.VaultFixtures.HEIR.xpub,
                     io.github.brunogutierre.bitpocket.core.vault.HeirTimelock.YEAR,
                 )
-            val opener = BdkWalletOpener(dir) { chain }
+            val opener = BdkWalletOpener(dir) { _, _ -> chain }
             val payload = SlotPayload(ByteArray(16), biometricSeed = null, network = network)
 
             opener.openVault(payload, config).use { vault ->
@@ -235,6 +235,8 @@ class FakeChainClient : ChainClient {
     }
 
     override fun feeEstimates(): Map<Int, Double> = estimates ?: throw java.io.IOException("offline")
+
+    override fun blockHash(height: Int): String = throw java.io.IOException("offline")
 
     override fun close() {
         closed = true

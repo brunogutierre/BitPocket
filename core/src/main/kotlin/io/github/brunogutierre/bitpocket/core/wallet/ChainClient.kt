@@ -17,6 +17,9 @@ interface ChainClient : AutoCloseable {
 
     fun broadcast(transaction: Transaction)
 
+    /** Hash of the block at [height], as hex. Throws on failure (BDK EsploraException). */
+    fun blockHash(height: Int): String
+
     /** Fee estimates: confirmation target in blocks -> sat/vB. Throws [java.io.IOException] on failure. */
     fun feeEstimates(): Map<Int, Double>
 }
@@ -35,6 +38,8 @@ class EsploraChainClient(
     override fun sync(request: SyncRequest): Update = client.sync(request, PARALLEL_REQUESTS)
 
     override fun broadcast(transaction: Transaction) = client.broadcast(transaction)
+
+    override fun blockHash(height: Int): String = client.getBlockHash(height.toUInt()).use { it.toString() }
 
     /**
      * Fetched directly instead of through BDK: mempool.space answers this deprecated endpoint with

@@ -23,7 +23,7 @@ A layered-security Bitcoin wallet for Android, built as a study project.
 - **Guardrails**: spending limits, delays and confirmations for risky transactions.
 - **Address fingerprint**: a visual/verbal fingerprint to help verify addresses.
 - **Security health score**: a checklist that grades the wallet setup.
-- **Privacy**: coin control, BIP329 label import/export, custom Electrum/Esplora server.
+- **Privacy**: coin control, BIP329 label import/export, custom Esplora server.
 
 ## Tech stack
 
@@ -66,6 +66,7 @@ A layered-security Bitcoin wallet for Android, built as a study project.
 | Vault keys at BIP48, heir in the policy from day one, backup any cosigner can open | No address migration later; no extra password to lose | [ADR 0007](docs/adr/0007-vault-keys-setup-and-backup.md) |
 | Heartbeat shown in the app (no background job); refresh = 2-of-2 self-transfer | A background task cannot open the encrypted wallet and would reveal the real wallet next to a decoy | [ADR 0008](docs/adr/0008-heartbeat-and-heir-claim.md) |
 | Duress PIN opens a decoy wallet in slot B; the app never knows the slot | Coercion resistance without a PIN oracle; CI guards the slot boundary | [ADR 0009](docs/adr/0009-duress-pin-and-decoy-wallet.md) |
+| Custom Esplora server only (no Electrum), https + genesis check | One backend to maintain; refuses other networks | [ADR 0010](docs/adr/0010-custom-server-esplora-only.md) |
 | Manual DI (`AppContainer`) | ~20 classes do not need a framework | — |
 | QR codes with zxing `core`, uppercase BIP21 | Pure Java (JVM-tested, no Play Services); alphanumeric mode makes smaller codes | — |
 | QR scanning with CameraX (`camera-compose`) + zxing | Open source, no Play Services; decoding is JVM-tested in `:core` | — |

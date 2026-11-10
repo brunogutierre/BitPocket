@@ -31,6 +31,7 @@ import io.github.brunogutierre.bitpocket.send.SendViewModel
 import io.github.brunogutierre.bitpocket.settings.ChangePinViewModel
 import io.github.brunogutierre.bitpocket.settings.DuressViewModel
 import io.github.brunogutierre.bitpocket.settings.GuardrailsViewModel
+import io.github.brunogutierre.bitpocket.settings.ServerViewModel
 import io.github.brunogutierre.bitpocket.settings.SettingsViewModel
 import io.github.brunogutierre.bitpocket.ui.components.SecureScreen
 import io.github.brunogutierre.bitpocket.ui.history.TransactionDetailsScreen
@@ -46,6 +47,7 @@ import io.github.brunogutierre.bitpocket.ui.send.SendScreen
 import io.github.brunogutierre.bitpocket.ui.settings.ChangePinScreen
 import io.github.brunogutierre.bitpocket.ui.settings.DuressScreen
 import io.github.brunogutierre.bitpocket.ui.settings.GuardrailsScreen
+import io.github.brunogutierre.bitpocket.ui.settings.ServerScreen
 import io.github.brunogutierre.bitpocket.ui.settings.SettingsScreen
 import io.github.brunogutierre.bitpocket.ui.vault.HeirClaimScreen
 import io.github.brunogutierre.bitpocket.ui.vault.VaultScreen
@@ -235,6 +237,7 @@ fun BitPocketNavHost(
                         onChangePin = { backStack.add(ChangePin) },
                         onGuardrails = { backStack.add(GuardrailsSettings) },
                         onDuress = { backStack.add(DuressSettings) },
+                        onServer = { backStack.add(ServerSettings) },
                         onSetUpVault = { backStack.add(VaultSetup(importing = false)) },
                         onImportVault = { backStack.add(VaultSetup(importing = true)) },
                         onClaimInheritance = { backStack.add(ClaimInheritance) },
@@ -269,6 +272,12 @@ fun BitPocketNavHost(
                     DuressScreen(
                         viewModel { DuressViewModel(container.walletAccess, container.session, container.mnemonicService) },
                         onClose = back,
+                    )
+                }
+                entry<ServerSettings> {
+                    ServerScreen(
+                        viewModel { ServerViewModel(container.walletAccess, container.session, container::checkServer) },
+                        onBack = back,
                     )
                 }
                 entry<ChangePin> {

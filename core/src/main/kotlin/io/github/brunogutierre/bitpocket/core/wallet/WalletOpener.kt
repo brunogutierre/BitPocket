@@ -20,12 +20,13 @@ interface WalletOpener {
 }
 
 /**
- * Opens the watch-only Spending wallet under `<root>/wallets/<id>/`, syncing through the chain
- * client [chainFor] returns for the wallet network. Blocking (SQLite): call off the main thread.
+ * Opens the watch-only pockets under `<root>/wallets/<id>/`, syncing through the chain client
+ * [chainFor] returns for the wallet network and server. Blocking (SQLite): call off the main thread.
  */
 class BdkWalletOpener(
     private val root: File,
-    private val chainFor: (SupportedNetwork) -> ChainClient,
+    /** A chain client for the network, at the wallet's custom server URL when it has one. */
+    private val chainFor: (SupportedNetwork, String?) -> ChainClient,
 ) : WalletOpener {
     override fun dirOf(payload: SlotPayload): File {
         val descriptors = SpendingDescriptors.fromEntropy(payload.seedEntropy, payload.network).use { it.toPublic() }
@@ -34,22 +35,22 @@ class BdkWalletOpener(
 
     override fun open(payload: SlotPayload): PocketWallet {
         val descriptors = SpendingDescriptors.fromEntropy(payload.seedEntropy, payload.network).use { it.toPublic() }
-        return withChain(payload.network) { chain -> BdkWallet.open(dirOf(payload), descriptors, payload.network, chain) }
+        return withChain(payload) { chain -> BdkWallet.open(dirOf(payload), descriptors, payload.network, chain) }
     }
 
     override fun openVault(
         payload: SlotPayload,
         config: VaultConfig,
     ): VaultPocket =
-        withChain(payload.network) { chain ->
+        withChain(payload) { chain ->
             BdkWallet.open(dirOf(payload), config.publicDescriptors(payload.network), payload.network, chain, vault = config)
         }
 
     private fun <T : PocketWallet> withChain(
-        network: SupportedNetwork,
+        payload: SlotPayload,
         open: (ChainClient) -> T,
     ): T {
-        val chain = chainFor(network)
+        val chain = chainFor(payload.network, payload.settings.esploraUrl)
         return try {
             open(chain)
         } catch (e: Exception) {

@@ -12,6 +12,7 @@ import io.github.brunogutierre.bitpocket.core.crypto.KdfParams
 import io.github.brunogutierre.bitpocket.core.crypto.SlotStore
 import io.github.brunogutierre.bitpocket.core.crypto.UnlockService
 import io.github.brunogutierre.bitpocket.core.crypto.writeAtomically
+import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
 import io.github.brunogutierre.bitpocket.core.onboarding.OnboardingDraft
 import io.github.brunogutierre.bitpocket.core.seed.MnemonicService
 import io.github.brunogutierre.bitpocket.core.session.AutoLocker
@@ -24,6 +25,8 @@ import io.github.brunogutierre.bitpocket.core.vault.HeirClaim
 import io.github.brunogutierre.bitpocket.core.vault.HeirClaimOpen
 import io.github.brunogutierre.bitpocket.core.wallet.BdkWalletOpener
 import io.github.brunogutierre.bitpocket.core.wallet.EsploraChainClient
+import io.github.brunogutierre.bitpocket.core.wallet.EsploraServer
+import io.github.brunogutierre.bitpocket.core.wallet.ServerCheck
 import io.github.brunogutierre.bitpocket.keystore.AndroidUnlockClock
 import io.github.brunogutierre.bitpocket.keystore.KeyAliases
 import io.github.brunogutierre.bitpocket.keystore.KeystoreKeyWrapper
@@ -60,7 +63,13 @@ class AppContainer(
     val autoLocker = AutoLocker(session)
 
     /** Watch-only wallet databases live next to the slots, in `wallets/<id>/`. */
-    private val walletOpener = BdkWalletOpener(storageDir) { network -> EsploraChainClient(network.esploraBaseUrl) }
+    private val walletOpener = BdkWalletOpener(storageDir) { network, url -> EsploraChainClient(url ?: network.esploraBaseUrl) }
+
+    /** Checks a custom Esplora server before it is saved (https, right genesis block). */
+    fun checkServer(
+        url: String,
+        network: SupportedNetwork,
+    ): ServerCheck = EsploraServer.check(url, network) { EsploraChainClient(it) }
 
     val walletAccess: WalletAccess by lazy { SlotWalletAccess(slotStore, unlockService, session, walletOpener) }
 
