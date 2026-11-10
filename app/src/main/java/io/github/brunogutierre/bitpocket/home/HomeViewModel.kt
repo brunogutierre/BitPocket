@@ -24,6 +24,8 @@ data class HomeUiState(
     /** Null while there is no Vault (Home then offers to set it up). */
     val vaultBalance: Balance? = null,
     val vaultHeartbeat: Heartbeat? = null,
+    /** BIP329 transaction labels, by txid. */
+    val labels: Map<String, String> = emptyMap(),
 )
 
 /**
@@ -35,6 +37,7 @@ class HomeViewModel(
     private val lockSession: () -> Unit,
     /** The Vault pocket, read each time: it can be set up while Home is on the back stack. */
     private val vault: () -> VaultPocket? = { null },
+    private val labels: () -> Map<String, String> = { emptyMap() },
 ) : ViewModel() {
     val network: SupportedNetwork = pocket.network
     private val _state = MutableStateFlow(HomeUiState())
@@ -75,6 +78,15 @@ class HomeViewModel(
         val vaultPocket = vault()
         val vaultBalance = vaultPocket?.balance()
         val heartbeat = vaultPocket?.heartbeat()
-        _state.update { it.copy(balance = balance, history = history, vaultBalance = vaultBalance, vaultHeartbeat = heartbeat) }
+        val labels = labels()
+        _state.update {
+            it.copy(
+                balance = balance,
+                history = history,
+                vaultBalance = vaultBalance,
+                vaultHeartbeat = heartbeat,
+                labels = labels,
+            )
+        }
     }
 }

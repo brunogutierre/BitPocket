@@ -94,7 +94,7 @@ class HomeViewModelTest {
     fun `shows and syncs the Vault once it exists`() {
         val vault = FakePocketWallet().apply { balance = Balance(70_000, 0) }
         var current: FakePocketWallet? = null
-        val vm = HomeViewModel(pocket, {}) { current }
+        val vm = HomeViewModel(pocket, {}, vault = { current })
         assertEquals(null, vm.state.value.vaultBalance)
 
         current = vault

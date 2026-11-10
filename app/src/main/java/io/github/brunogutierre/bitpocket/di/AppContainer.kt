@@ -12,6 +12,7 @@ import io.github.brunogutierre.bitpocket.core.crypto.KdfParams
 import io.github.brunogutierre.bitpocket.core.crypto.SlotStore
 import io.github.brunogutierre.bitpocket.core.crypto.UnlockService
 import io.github.brunogutierre.bitpocket.core.crypto.writeAtomically
+import io.github.brunogutierre.bitpocket.core.labels.LabelStore
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
 import io.github.brunogutierre.bitpocket.core.onboarding.OnboardingDraft
 import io.github.brunogutierre.bitpocket.core.seed.MnemonicService
@@ -96,6 +97,9 @@ class AppContainer(
         backup: ByteArray,
         heirSeed: ByteArray,
     ): HeirClaimOpen = HeirClaim.open(backup, heirSeed) { network -> EsploraChainClient(network.esploraBaseUrl) }
+
+    /** The open wallet's BIP329 labels (`wallets/<id>/labels.jsonl`). */
+    fun labels(): LabelStore? = session.wallet?.dir?.let { LabelStore(File(it, "labels.jsonl")) }
 
     fun biometricAvailable(): Boolean = BiometricAvailability.status(appContext) == BiometricStatus.AVAILABLE
 

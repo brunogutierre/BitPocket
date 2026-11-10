@@ -3,6 +3,8 @@ package io.github.brunogutierre.bitpocket.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.brunogutierre.bitpocket.core.crypto.wipe
+import io.github.brunogutierre.bitpocket.core.labels.LabelImport
+import io.github.brunogutierre.bitpocket.core.labels.LabelStore
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
 import io.github.brunogutierre.bitpocket.core.seed.BiometricSeedVault
 import io.github.brunogutierre.bitpocket.core.seed.Bip39
@@ -31,6 +33,8 @@ data class SettingsUiState(
     val biometricAvailable: Boolean = false,
     val autoLock: AutoLock = AutoLock.DEFAULT,
     val hasVault: Boolean = false,
+    /** Result of the last BIP329 import. */
+    val labelImport: LabelImport? = null,
     val choosingAutoLock: Boolean = false,
     /** The auto-lock time waiting for the PIN. */
     val pendingAutoLock: AutoLock? = null,
@@ -59,6 +63,7 @@ class SettingsViewModel(
     private val session: Session,
     biometricAvailable: Boolean,
     private val wipeAll: () -> Unit,
+    private val labels: () -> LabelStore? = { null },
     private val workDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
     val network: SupportedNetwork = session.wallet?.network ?: SupportedNetwork.DEFAULT
@@ -81,6 +86,23 @@ class SettingsViewModel(
 
     /** Back on Settings after the Vault wizard: show what changed. */
     fun refresh() = _state.update { it.copy(hasVault = session.wallet?.settings?.vault != null) }
+
+    /** BIP329 export of the wallet's labels, for the file the user picks. */
+    fun exportLabels(): String = labels()?.export().orEmpty()
+
+    /** Merges a BIP329 file and freezes the outputs it marks unspendable. */
+    fun importLabels(jsonl: String) {
+        val store = labels() ?: return
+        viewModelScope.launch {
+            val result = withContext(workDispatcher) { store.import(jsonl, network) }
+            val wallet = session.wallet
+            result.frozen.forEach { outpoint ->
+                runCatching { wallet?.spending?.setFrozen(outpoint, true) }
+                runCatching { wallet?.vault?.setFrozen(outpoint, true) }
+            }
+            _state.update { it.copy(labelImport = result) }
+        }
+    }
 
     fun openAutoLock() = _state.update { it.copy(choosingAutoLock = true) }
 

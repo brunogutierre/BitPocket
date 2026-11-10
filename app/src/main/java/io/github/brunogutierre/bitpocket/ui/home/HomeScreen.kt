@@ -104,7 +104,9 @@ fun HomeScreen(
                         )
                     }
                 }
-                items(state.history, key = { it.txid }) { item -> TransactionRow(item, Modifier.clickable { onTransaction(item.txid) }) }
+                items(state.history, key = {
+                    it.txid
+                }) { item -> TransactionRow(item, Modifier.clickable { onTransaction(item.txid) }, state.labels[item.txid]) }
                 item {
                     SecondaryButton(stringResource(R.string.home_lock), onClick = {
                         viewModel.lock()

@@ -168,7 +168,14 @@ fun BitPocketNavHost(
                     val wallet = container.session.wallet
                     if (wallet != null) {
                         HomeScreen(
-                            viewModel { HomeViewModel(wallet.spending, container.session::lock) { container.session.wallet?.vault } },
+                            viewModel {
+                                HomeViewModel(
+                                    wallet.spending,
+                                    container.session::lock,
+                                    vault = { container.session.wallet?.vault },
+                                    labels = { container.labels()?.transactionLabels().orEmpty() },
+                                )
+                            },
                             onReceive = { backStack.add(Receive()) },
                             onSend = { backStack.add(Send()) },
                             onVault = { backStack.add(VaultHome) },
@@ -233,7 +240,13 @@ fun BitPocketNavHost(
                 entry<Settings> {
                     SettingsScreen(
                         viewModel {
-                            SettingsViewModel(container.walletAccess, container.session, container.biometricAvailable(), container::wipeAll)
+                            SettingsViewModel(
+                                container.walletAccess,
+                                container.session,
+                                container.biometricAvailable(),
+                                container::wipeAll,
+                                container::labels,
+                            )
                         },
                         seedCipher = container.seedCipher,
                         onBack = back,
@@ -298,7 +311,10 @@ fun BitPocketNavHost(
                     if (pocket !=
                         null
                     ) {
-                        TransactionDetailsScreen(viewModel { TransactionDetailsViewModel(pocket, route.txid) }, onBack = back)
+                        TransactionDetailsScreen(
+                            viewModel { TransactionDetailsViewModel(pocket, route.txid, container.labels()) },
+                            onBack = back,
+                        )
                     }
                 }
             },

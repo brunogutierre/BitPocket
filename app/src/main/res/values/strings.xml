@@ -300,5 +300,11 @@
         <item quantity="other">Coins: %1$d chosen</item>
     </plurals>
     <string name="send_coins_body">Only these coins will pay (with \"send all\", all of them go). Paying with coins from different sources links them together.</string>
+    <string name="tx_label">Label (only on this phone)</string>
+    <string name="labels_export">Export labels</string>
+    <string name="labels_export_body">BIP329 file other wallets can read.</string>
+    <string name="labels_import">Import labels</string>
+    <string name="labels_import_body">From a BIP329 file; coins marked unspendable get frozen.</string>
+    <string name="labels_imported" tools:ignore="PluralsCandidate">Imported %1$d labels, skipped %2$d, froze %3$d coins.</string>
     <string name="pin_too_weak">PIN too easy to guess. Choose another one.</string>
 </resources>
