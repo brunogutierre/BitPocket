@@ -61,6 +61,9 @@ data object GuardrailsSettings : NavKey
 @Serializable
 data object DuressSettings : NavKey
 
+@Serializable
+data object ServerSettings : NavKey
+
 /** Vault setup wizard, or import of a backup when [importing]. */
 @Serializable
 data class VaultSetup(

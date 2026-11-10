@@ -276,5 +276,18 @@
     <string name="duress_same_pin">The duress PIN must differ from your PIN.</string>
     <string name="duress_done_on">The duress PIN now opens a decoy wallet. Lock, unlock with it, and fund the decoy.</string>
     <string name="duress_done_off">The duress PIN and its decoy wallet are gone.</string>
+    <string name="settings_privacy">Privacy</string>
+    <string name="settings_server_body">Use your own Esplora server instead of mempool.space.</string>
+    <string name="server_title">Server</string>
+    <string name="server_body">BitPocket asks an Esplora server about your addresses. The default is %1$s, which can see them. Run your own to keep them private.</string>
+    <string name="server_url">Esplora URL (https)</string>
+    <string name="server_check_save">Check and save</string>
+    <string name="server_use_default">Use the default server</string>
+    <string name="server_pin">Enter your PIN to change the server.</string>
+    <string name="server_rejected">Server not saved</string>
+    <string name="server_not_https">Use an https:// URL: your addresses must not travel in clear text.</string>
+    <string name="server_wrong_network">This server serves another network. BitPocket only uses Signet or Testnet4.</string>
+    <string name="server_unreachable">Could not reach this server, or it is not an Esplora API.</string>
+    <string name="server_saved">Saved. The server is used from the next time you unlock.</string>
     <string name="pin_too_weak">PIN too easy to guess. Choose another one.</string>
 </resources>
