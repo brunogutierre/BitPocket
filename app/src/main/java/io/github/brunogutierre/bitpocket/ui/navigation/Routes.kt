@@ -64,6 +64,12 @@ data object DuressSettings : NavKey
 @Serializable
 data object ServerSettings : NavKey
 
+/** Coin control for the Spending pocket, or the Vault when [vault]. */
+@Serializable
+data class Coins(
+    val vault: Boolean = false,
+) : NavKey
+
 /** Vault setup wizard, or import of a backup when [importing]. */
 @Serializable
 data class VaultSetup(
