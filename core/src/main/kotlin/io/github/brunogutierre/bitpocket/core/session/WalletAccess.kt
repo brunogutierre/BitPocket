@@ -142,6 +142,19 @@ interface WalletAccess {
         backup: ByteArray,
     ): VaultSetupOutcome
 
+    /**
+     * Sets up the duress PIN after checking [pin] (ADR 0009): [duressPin] will open a decoy wallet
+     * made from [decoyEntropy] (the caller wipes it). [duressPin] must differ from [pin].
+     */
+    fun setUpDuress(
+        pin: CharArray,
+        duressPin: CharArray,
+        decoyEntropy: ByteArray,
+    ): SettingsOutcome
+
+    /** Removes the decoy wallet after checking [pin]; its slot becomes random bytes again. */
+    fun removeDuress(pin: CharArray): SettingsOutcome
+
     /** Saves new security settings in the slot after checking [pin] (ADR 0005). */
     fun updateSettings(
         pin: CharArray,
@@ -149,7 +162,10 @@ interface WalletAccess {
     ): SettingsOutcome
 }
 
-/** [WalletAccess] over the slot store. M1 uses slot A only; slot B stays a decoy. */
+/**
+ * [WalletAccess] over the slot store. Slot A holds the real wallet; slot B holds the decoy opened by
+ * the duress PIN, or random bytes. Only this class knows which is which: the app never sees a slot.
+ */
 class SlotWalletAccess(
     private val slots: SlotStore,
     private val unlockService: UnlockService,
@@ -163,8 +179,8 @@ class SlotWalletAccess(
     ) {
         // Biometric signing is turned on later, in Settings, so no biometric copy yet.
         val payload = SlotPayload(seedEntropy.copyOf(), biometricSeed = null, network = network)
-        save(SlotId.A, pin, payload)
-        openSession(SlotId.A, payload)
+        save(REAL, pin, payload)
+        openSession(REAL, payload)
     }
 
     override fun unlock(pin: CharArray): UnlockOutcome =
@@ -256,6 +272,42 @@ class SlotWalletAccess(
 
     override fun verifyPin(pin: CharArray): SettingsOutcome = withPayload(pin) { _, _ -> SettingsOutcome.Done }
 
+    override fun setUpDuress(
+        pin: CharArray,
+        duressPin: CharArray,
+        decoyEntropy: ByteArray,
+    ): SettingsOutcome {
+        if (pin.contentEquals(duressPin)) return SettingsOutcome.Failed
+        return withPayload(pin) { slot, payload ->
+            if (slot == REAL) {
+                // The decoy gets its own wallet in slot B; the real wallet only records the flag.
+                save(DECOY, duressPin, SlotPayload(decoyEntropy.copyOf(), null, payload.network))
+                saveSettings(slot, pin, payload, payload.settings.copy(duress = true))
+            } else {
+                // Inside the decoy: look the same, but never touch the real wallet (no PIN oracle).
+                saveSettings(slot, pin, payload, payload.settings.copy(duress = true))
+            }
+            SettingsOutcome.Done
+        }
+    }
+
+    override fun removeDuress(pin: CharArray): SettingsOutcome =
+        withPayload(pin) { slot, payload ->
+            if (slot == REAL) slots.reset(DECOY)
+            saveSettings(slot, pin, payload, payload.settings.copy(duress = false))
+            SettingsOutcome.Done
+        }
+
+    private fun saveSettings(
+        slot: SlotId,
+        pin: CharArray,
+        payload: SlotPayload,
+        settings: WalletSettings,
+    ) {
+        save(slot, pin, payload.withSettings(settings))
+        session.updateSettings(settings)
+    }
+
     override fun updateSettings(
         pin: CharArray,
         settings: WalletSettings,
@@ -342,6 +394,11 @@ class SlotWalletAccess(
                 }
             }
         }
+
+    private companion object {
+        val REAL = SlotId.A
+        val DECOY = SlotId.B
+    }
 
     private sealed interface Reauth {
         class Ok(

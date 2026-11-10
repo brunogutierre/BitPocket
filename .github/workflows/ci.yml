@@ -34,6 +34,10 @@ jobs:
       - name: Check no mainnet references
         run: sh scripts/check-no-mainnet.sh
 
+      # Duress: the UI must never know which slot (real or decoy) is open.
+      - name: Check the app never branches on the slot
+        run: sh scripts/check-no-slot-in-app.sh
+
       - name: Check, test and build
         run: ./gradlew spotlessCheck lint :core:test testDebugUnitTest koverVerify assembleDebug
 

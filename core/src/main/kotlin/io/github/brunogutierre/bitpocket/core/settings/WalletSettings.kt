@@ -33,6 +33,8 @@ data class WalletSettings(
     val scheduledGuardrails: ScheduledGuardrails? = null,
     /** The Vault pocket's public keys and timelock, once set up (ADR 0007). */
     val vault: VaultConfig? = null,
+    /** Whether a duress PIN was set up from this wallet (ADR 0009). */
+    val duress: Boolean = false,
 ) {
     /**
      * Tag-length-value records: `tag (1) | length (2) | value`. Unknown tags are skipped when
@@ -44,7 +46,9 @@ data class WalletSettings(
                 record(TAG_SCHEDULED_GUARDRAILS, it.guardrails.encode() + ByteBuffer.allocate(4).putInt(it.activatesAtHeight).array())
             } ?: ByteArray(0)
         val vaultRecord = vault?.let { record(TAG_VAULT, it.encode()) } ?: ByteArray(0)
-        return record(TAG_AUTO_LOCK, byteArrayOf(autoLock.id)) + record(TAG_GUARDRAILS, guardrails.encode()) + scheduled + vaultRecord
+        val duressRecord = if (duress) record(TAG_DURESS, byteArrayOf(1)) else ByteArray(0)
+        return record(TAG_AUTO_LOCK, byteArrayOf(autoLock.id)) + record(TAG_GUARDRAILS, guardrails.encode()) + scheduled + vaultRecord +
+            duressRecord
     }
 
     companion object {
@@ -52,6 +56,7 @@ data class WalletSettings(
         private const val TAG_GUARDRAILS: Byte = 2
         private const val TAG_SCHEDULED_GUARDRAILS: Byte = 3
         private const val TAG_VAULT: Byte = 4
+        private const val TAG_DURESS: Byte = 5
 
         /** @throws IllegalArgumentException for malformed records or values. */
         fun decode(bytes: ByteArray): WalletSettings {
@@ -77,6 +82,10 @@ data class WalletSettings(
                                 require(value.size == Guardrails.ENCODED_SIZE + 4) { "Bad scheduled guardrails record" }
                                 val buffer = ByteBuffer.wrap(value)
                                 settings.copy(scheduledGuardrails = ScheduledGuardrails(Guardrails.decode(buffer), buffer.int))
+                            }
+
+                            TAG_DURESS -> {
+                                settings.copy(duress = value.singleOrNull() == 1.toByte())
                             }
 
                             TAG_VAULT -> {

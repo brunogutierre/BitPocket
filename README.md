@@ -65,6 +65,7 @@ A layered-security Bitcoin wallet for Android, built as a study project.
 | Watch-only wallets + short-lived signers, Esplora sync | Keys never persisted by BDK; no background access | [ADR 0004](docs/adr/0004-watch-only-wallets-and-esplora-sync.md) |
 | Vault keys at BIP48, heir in the policy from day one, backup any cosigner can open | No address migration later; no extra password to lose | [ADR 0007](docs/adr/0007-vault-keys-setup-and-backup.md) |
 | Heartbeat shown in the app (no background job); refresh = 2-of-2 self-transfer | A background task cannot open the encrypted wallet and would reveal the real wallet next to a decoy | [ADR 0008](docs/adr/0008-heartbeat-and-heir-claim.md) |
+| Duress PIN opens a decoy wallet in slot B; the app never knows the slot | Coercion resistance without a PIN oracle; CI guards the slot boundary | [ADR 0009](docs/adr/0009-duress-pin-and-decoy-wallet.md) |
 | Manual DI (`AppContainer`) | ~20 classes do not need a framework | — |
 | QR codes with zxing `core`, uppercase BIP21 | Pure Java (JVM-tested, no Play Services); alphanumeric mode makes smaller codes | — |
 | QR scanning with CameraX (`camera-compose`) + zxing | Open source, no Play Services; decoding is JVM-tested in `:core` | — |
@@ -94,7 +95,8 @@ Requirements: JDK 17+ and the Android SDK (platform 37). Point Gradle to the SDK
 adb install app/build/outputs/apk/debug/app-debug.apk
 ```
 
-CI (GitHub Actions) runs `spotlessCheck lint testDebugUnitTest koverVerify assembleDebug`
+CI (GitHub Actions) runs the mainnet and slot guards (`scripts/check-no-mainnet.sh`,
+`scripts/check-no-slot-in-app.sh`), then `spotlessCheck lint :core:test testDebugUnitTest koverVerify assembleDebug`,
 on every pull request and push to `main`.
 
 ## Roadmap

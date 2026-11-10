@@ -245,6 +245,67 @@ class SlotWalletAccessTest {
     }
 
     @Test
+    fun `the duress PIN opens a decoy wallet that knows nothing of the real one`() {
+        val access = access()
+        val decoy = ByteArray(16) { 6 }
+        access.create("123456".toCharArray(), entropy, SupportedNetwork.TESTNET4)
+
+        assertEquals(SettingsOutcome.Failed, access.setUpDuress("123456".toCharArray(), "123456".toCharArray(), decoy))
+        assertEquals(SettingsOutcome.Done, access.setUpDuress("123456".toCharArray(), "258147".toCharArray(), decoy))
+        assertTrue(session.wallet!!.settings.duress)
+        session.lock()
+
+        assertEquals(UnlockOutcome.Unlocked, access.unlock("258147".toCharArray()))
+        val decoySession = session.wallet!!
+        assertEquals(SlotId.B, decoySession.slot)
+        assertEquals(SupportedNetwork.TESTNET4, decoySession.network)
+        assertFalse(decoySession.settings.duress, "the decoy shows no duress PIN")
+        assertTrue(
+            opener.payloads
+                .last()
+                .seedEntropy
+                .contentEquals(ByteArray(16)),
+            "decoy seed wiped after opening",
+        )
+        val decoySeed = (access.seedForSigning("258147".toCharArray()) as SeedOutcome.Seed).entropy
+        assertArrayEquals(decoy, decoySeed)
+    }
+
+    @Test
+    fun `setting up duress inside the decoy changes nothing in the real wallet`() {
+        val access = access()
+        access.create("123456".toCharArray(), entropy, SupportedNetwork.SIGNET)
+        access.setUpDuress("123456".toCharArray(), "258147".toCharArray(), ByteArray(16) { 6 })
+        session.lock()
+        access.unlock("258147".toCharArray())
+
+        // From the decoy, "set up duress" with the real PIN as the new one: no oracle, no change.
+        assertEquals(SettingsOutcome.Done, access.setUpDuress("258147".toCharArray(), "123456".toCharArray(), ByteArray(16) { 7 }))
+        assertTrue(session.wallet!!.settings.duress)
+
+        session.lock()
+        assertEquals(UnlockOutcome.Unlocked, access.unlock("123456".toCharArray()))
+        assertEquals(SlotId.A, session.wallet!!.slot)
+        assertArrayEquals(entropy, (access.seedForSigning("123456".toCharArray()) as SeedOutcome.Seed).entropy)
+        assertTrue(session.wallet!!.settings.duress, "the real wallet's own setting is untouched")
+    }
+
+    @Test
+    fun `removing duress turns the decoy slot back into random bytes`() {
+        val access = access()
+        access.create("123456".toCharArray(), entropy, SupportedNetwork.SIGNET)
+        access.setUpDuress("123456".toCharArray(), "258147".toCharArray(), ByteArray(16) { 6 })
+        val sizeBefore = storage.files.getValue(SlotId.B).size
+
+        assertEquals(SettingsOutcome.Done, access.removeDuress("123456".toCharArray()))
+
+        assertFalse(session.wallet!!.settings.duress)
+        assertEquals(sizeBefore, storage.files.getValue(SlotId.B).size)
+        session.lock()
+        assertEquals(UnlockOutcome.WrongPin(Duration.ZERO), access.unlock("258147".toCharArray()))
+    }
+
+    @Test
     fun `wiping deletes slots, attempts and wallet databases`(
         @TempDir root: File,
     ) {

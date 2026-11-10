@@ -96,4 +96,18 @@ class FakeWalletAccess : WalletAccess {
         vaultCalls += "import ${String(pin)} ${backup.size}"
         return vaultOutcomes.removeFirst()
     }
+
+    override fun setUpDuress(
+        pin: CharArray,
+        duressPin: CharArray,
+        decoyEntropy: ByteArray,
+    ): SettingsOutcome {
+        settingsCalls += "duress ${String(pin)} ${String(duressPin)} ${decoyEntropy.first()}"
+        return settingsOutcomes.removeFirst()
+    }
+
+    override fun removeDuress(pin: CharArray): SettingsOutcome {
+        settingsCalls += "removeDuress ${String(pin)}"
+        return settingsOutcomes.removeFirst()
+    }
 }
