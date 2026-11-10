@@ -29,6 +29,12 @@ class SupportedNetworkTest {
     }
 
     @Test
+    fun `links transactions to the explorer of the same network`() {
+        assertEquals("https://mempool.space/signet/tx/ab", SupportedNetwork.SIGNET.explorerTxUrl("ab"))
+        assertEquals("https://mempool.space/testnet4/tx/ab", SupportedNetwork.TESTNET4.explorerTxUrl("ab"))
+    }
+
+    @Test
     fun `defaults to signet`() {
         assertEquals(SupportedNetwork.SIGNET, SupportedNetwork.DEFAULT)
         assertEquals("Signet", SupportedNetwork.DEFAULT.displayName)

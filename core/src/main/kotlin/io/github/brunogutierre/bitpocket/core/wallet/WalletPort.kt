@@ -1,6 +1,8 @@
 package io.github.brunogutierre.bitpocket.core.wallet
 
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
+import io.github.brunogutierre.bitpocket.core.send.FeeOptions
+import io.github.brunogutierre.bitpocket.core.send.SpendPort
 
 /** Balance of a pocket, in satoshis. */
 data class Balance(
@@ -32,21 +34,31 @@ interface WalletPort {
      */
     suspend fun freshReceiveAddress(): ReceiveAddress?
 
+    /** Every wallet transaction, newest first. */
+    suspend fun history(): List<HistoryItem>
+
+    /** One transaction by id, or null if the wallet does not know it. */
+    suspend fun transaction(txid: String): HistoryItem?
+
     companion object {
         const val MAX_UNUSED_ADDRESSES = 10
     }
 }
 
-/** The chain backend of a wallet (Esplora). Fee rates and broadcast arrive with sending. */
+/** The chain backend of a wallet (Esplora). Calls throw [ChainUnavailableException] when it cannot be reached. */
 interface ChainPort {
-    /** Fetches new chain data. Throws [ChainUnavailableException] when the backend cannot be reached. */
+    /** Fetches new chain data. */
     suspend fun sync()
+
+    /** Current fee rates for fast, normal and slow confirmation. */
+    suspend fun feeRates(): FeeOptions
 }
 
-/** An open pocket: what the UI reads and refreshes. Closed when the session locks. */
+/** An open pocket: what the UI reads, refreshes and spends from. Closed when the session locks. */
 interface PocketWallet :
     WalletPort,
     ChainPort,
+    SpendPort,
     AutoCloseable
 
 /** The chain backend failed (offline, timeout, HTTP error); the user can retry. */

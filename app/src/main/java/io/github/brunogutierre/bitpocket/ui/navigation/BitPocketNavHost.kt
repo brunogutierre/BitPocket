@@ -18,6 +18,7 @@ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import io.github.brunogutierre.bitpocket.core.session.LaunchState
 import io.github.brunogutierre.bitpocket.di.AppContainer
+import io.github.brunogutierre.bitpocket.history.TransactionDetailsViewModel
 import io.github.brunogutierre.bitpocket.home.HomeViewModel
 import io.github.brunogutierre.bitpocket.lock.LockViewModel
 import io.github.brunogutierre.bitpocket.onboarding.CreateSeedViewModel
@@ -26,7 +27,9 @@ import io.github.brunogutierre.bitpocket.onboarding.SetPinViewModel
 import io.github.brunogutierre.bitpocket.onboarding.VerifySeedViewModel
 import io.github.brunogutierre.bitpocket.onboarding.WelcomeViewModel
 import io.github.brunogutierre.bitpocket.receive.ReceiveViewModel
+import io.github.brunogutierre.bitpocket.send.SendViewModel
 import io.github.brunogutierre.bitpocket.ui.components.SecureScreen
+import io.github.brunogutierre.bitpocket.ui.history.TransactionDetailsScreen
 import io.github.brunogutierre.bitpocket.ui.home.HomeScreen
 import io.github.brunogutierre.bitpocket.ui.lock.LockScreen
 import io.github.brunogutierre.bitpocket.ui.onboarding.CreateSeedScreen
@@ -35,6 +38,7 @@ import io.github.brunogutierre.bitpocket.ui.onboarding.SetPinScreen
 import io.github.brunogutierre.bitpocket.ui.onboarding.VerifySeedScreen
 import io.github.brunogutierre.bitpocket.ui.onboarding.WelcomeScreen
 import io.github.brunogutierre.bitpocket.ui.receive.ReceiveScreen
+import io.github.brunogutierre.bitpocket.ui.send.SendScreen
 
 private const val NAV_DURATION_MS = 300
 
@@ -135,6 +139,8 @@ fun BitPocketNavHost(
                         HomeScreen(
                             viewModel { HomeViewModel(wallet.spending, container.session::lock) },
                             onReceive = { backStack.add(Receive) },
+                            onSend = { backStack.add(Send) },
+                            onTransaction = { txid -> backStack.add(TransactionDetails(txid)) },
                             onLocked = { resetTo(Lock) },
                         )
                     }
@@ -142,6 +148,16 @@ fun BitPocketNavHost(
                 entry<Receive> {
                     val wallet = container.session.wallet
                     if (wallet != null) ReceiveScreen(viewModel { ReceiveViewModel(wallet.spending) }, onBack = back)
+                }
+                entry<Send> {
+                    val wallet = container.session.wallet
+                    if (wallet != null) SendScreen(viewModel { SendViewModel(wallet.spending) }, onBack = back)
+                }
+                entry<TransactionDetails> { route ->
+                    val wallet = container.session.wallet
+                    if (wallet != null) {
+                        TransactionDetailsScreen(viewModel { TransactionDetailsViewModel(wallet.spending, route.txid) }, onBack = back)
+                    }
                 }
             },
     )

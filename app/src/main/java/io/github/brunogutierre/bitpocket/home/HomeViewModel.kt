@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
 import io.github.brunogutierre.bitpocket.core.wallet.Balance
 import io.github.brunogutierre.bitpocket.core.wallet.ChainUnavailableException
+import io.github.brunogutierre.bitpocket.core.wallet.HistoryItem
 import io.github.brunogutierre.bitpocket.core.wallet.PocketWallet
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,12 +16,13 @@ import kotlinx.coroutines.launch
 data class HomeUiState(
     /** Null until the saved balance is read. */
     val balance: Balance? = null,
+    val history: List<HistoryItem> = emptyList(),
     val syncing: Boolean = false,
     val syncFailed: Boolean = false,
 )
 
 /**
- * Spending pocket overview. The saved balance shows at once; a sync starts right after unlock
+ * Spending pocket overview. The saved balance and history show at once; a sync starts right after unlock
  * (this ViewModel lives as long as Home is on the back stack) and on pull-to-refresh.
  */
 class HomeViewModel(
@@ -32,7 +34,7 @@ class HomeViewModel(
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
 
     init {
-        viewModelScope.launch { readBalance() }
+        viewModelScope.launch { readWallet() }
         sync()
     }
 
@@ -47,15 +49,16 @@ class HomeViewModel(
                 } catch (e: ChainUnavailableException) {
                     true
                 }
-            readBalance()
+            readWallet()
             _state.update { it.copy(syncing = false, syncFailed = failed) }
         }
     }
 
     fun lock() = lockSession()
 
-    private suspend fun readBalance() {
+    private suspend fun readWallet() {
         val balance = pocket.balance()
-        _state.update { it.copy(balance = balance) }
+        val history = pocket.history()
+        _state.update { it.copy(balance = balance, history = history) }
     }
 }

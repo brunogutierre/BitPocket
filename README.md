@@ -66,6 +66,10 @@ A layered-security Bitcoin wallet for Android, built as a study project.
 | Manual DI (`AppContainer`) | ~20 classes do not need a framework | — |
 | QR codes with zxing `core`, uppercase BIP21 | Pure Java (JVM-tested, no Play Services); alphanumeric mode makes smaller codes | — |
 | At most 10 unused receive addresses | A restore scans until 20 unused in a row (stop gap) | — |
+| SpendGuard on every spend: confirmed coins only | Unconfirmed `older()` spends abort the process in BDK 3.1.0 | [ADR 0002](docs/adr/0002-vault-policy-and-signing.md) |
+| Amounts typed in whole sats; minimum 546 sats | No decimal separator to get wrong; above every dust limit | — |
+| Fee estimates fetched directly (any 2xx) | mempool.space answers `/fee-estimates` with HTTP 203, which BDK rejects | — |
+| App unit tests use `bdk-jvm` | View models are tested against real BDK validation | [ADR 0001](docs/adr/0001-bdk-on-jvm-for-core-tests.md) |
 
 ## Building
 

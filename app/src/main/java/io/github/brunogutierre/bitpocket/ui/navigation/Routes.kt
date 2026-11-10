@@ -30,6 +30,14 @@ data object Home : NavKey
 @Serializable
 data object Receive : NavKey
 
+@Serializable
+data object Send : NavKey
+
+@Serializable
+data class TransactionDetails(
+    val txid: String,
+) : NavKey
+
 fun LaunchState.startRoute(): NavKey =
     when (this) {
         LaunchState.ONBOARDING -> Welcome

@@ -1,12 +1,15 @@
 package io.github.brunogutierre.bitpocket.ui.home
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -15,6 +18,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -24,9 +28,11 @@ import io.github.brunogutierre.bitpocket.core.format.BitcoinFormat
 import io.github.brunogutierre.bitpocket.core.wallet.Balance
 import io.github.brunogutierre.bitpocket.home.HomeViewModel
 import io.github.brunogutierre.bitpocket.ui.components.BitPocketTopBar
+import io.github.brunogutierre.bitpocket.ui.components.EmptyState
 import io.github.brunogutierre.bitpocket.ui.components.PrimaryButton
 import io.github.brunogutierre.bitpocket.ui.components.SecondaryButton
 import io.github.brunogutierre.bitpocket.ui.components.WarningBanner
+import io.github.brunogutierre.bitpocket.ui.history.TransactionRow
 import io.github.brunogutierre.bitpocket.ui.theme.Spacing
 import io.github.brunogutierre.bitpocket.ui.theme.monoTypography
 import io.github.brunogutierre.bitpocket.ui.theme.screenHorizontalPadding
@@ -36,6 +42,8 @@ import io.github.brunogutierre.bitpocket.ui.theme.screenHorizontalPadding
 fun HomeScreen(
     viewModel: HomeViewModel,
     onReceive: () -> Unit,
+    onSend: () -> Unit,
+    onTransaction: (txid: String) -> Unit,
     onLocked: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -56,7 +64,23 @@ fun HomeScreen(
                         WarningBanner(stringResource(R.string.home_sync_failed_title), stringResource(R.string.home_sync_failed_body))
                     }
                 }
-                item { PrimaryButton(stringResource(R.string.home_receive), onClick = onReceive) }
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                        PrimaryButton(stringResource(R.string.home_receive), onClick = onReceive, modifier = Modifier.weight(1f))
+                        PrimaryButton(stringResource(R.string.home_send), onClick = onSend, modifier = Modifier.weight(1f))
+                    }
+                }
+                item { Text(stringResource(R.string.home_activity), style = MaterialTheme.typography.titleMedium) }
+                if (state.history.isEmpty()) {
+                    item {
+                        EmptyState(
+                            painterResource(R.drawable.ic_science),
+                            stringResource(R.string.home_empty_title),
+                            stringResource(R.string.home_empty_body),
+                        )
+                    }
+                }
+                items(state.history, key = { it.txid }) { item -> TransactionRow(item, Modifier.clickable { onTransaction(item.txid) }) }
                 item {
                     SecondaryButton(stringResource(R.string.home_lock), onClick = {
                         viewModel.lock()

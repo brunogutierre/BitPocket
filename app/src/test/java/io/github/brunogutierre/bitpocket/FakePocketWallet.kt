@@ -1,8 +1,14 @@
 package io.github.brunogutierre.bitpocket
 
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
+import io.github.brunogutierre.bitpocket.core.send.FeeOptions
+import io.github.brunogutierre.bitpocket.core.send.SpendError
+import io.github.brunogutierre.bitpocket.core.send.SpendException
+import io.github.brunogutierre.bitpocket.core.send.SpendPlan
+import io.github.brunogutierre.bitpocket.core.send.SpendRequest
 import io.github.brunogutierre.bitpocket.core.wallet.Balance
 import io.github.brunogutierre.bitpocket.core.wallet.ChainUnavailableException
+import io.github.brunogutierre.bitpocket.core.wallet.HistoryItem
 import io.github.brunogutierre.bitpocket.core.wallet.PocketWallet
 import io.github.brunogutierre.bitpocket.core.wallet.ReceiveAddress
 import kotlinx.coroutines.CompletableDeferred
@@ -27,11 +33,33 @@ class FakePocketWallet(
 
     override suspend fun freshReceiveAddress(): ReceiveAddress? = freshAddresses.removeFirstOrNull()
 
+    var historyItems = emptyList<HistoryItem>()
+
+    override suspend fun history() = historyItems
+
+    override suspend fun transaction(txid: String) = historyItems.firstOrNull { it.txid == txid }
+
     override suspend fun sync() {
         syncs++
         syncGate?.await()
         if (offline) throw ChainUnavailableException(RuntimeException("offline"))
         balanceAfterSync?.let { balance = it }
+    }
+
+    var fees = FeeOptions(fast = 5, normal = 2, slow = 1)
+
+    override suspend fun feeRates(): FeeOptions {
+        if (offline) throw ChainUnavailableException(RuntimeException("offline"))
+        return fees
+    }
+
+    /** Plans handed out by [planSpend]; the request is recorded. Empty = insufficient funds. */
+    val plans = ArrayDeque<SpendPlan>()
+    var lastSpendRequest: SpendRequest? = null
+
+    override suspend fun planSpend(request: SpendRequest): SpendPlan {
+        lastSpendRequest = request
+        return plans.removeFirstOrNull() ?: throw SpendException(SpendError.INSUFFICIENT_FUNDS)
     }
 
     override fun close() {

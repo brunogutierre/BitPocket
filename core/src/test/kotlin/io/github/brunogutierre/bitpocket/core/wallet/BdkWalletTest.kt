@@ -2,6 +2,7 @@ package io.github.brunogutierre.bitpocket.core.wallet
 
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
 import io.github.brunogutierre.bitpocket.core.seed.SlotPayload
+import io.github.brunogutierre.bitpocket.core.send.FeeOptions
 import io.github.brunogutierre.bitpocket.core.testing.ChainFixtures
 import io.github.brunogutierre.bitpocket.core.testing.Funding
 import kotlinx.coroutines.Dispatchers
@@ -86,6 +87,24 @@ class BdkWalletTest {
         }
 
     @Test
+    fun `history lists pending coins first, with confirmations counted from the tip`() =
+        runTest {
+            fundedWallet(confirmedAt = 100u, pendingSats = 20_000).use { wallet ->
+                val history = wallet.history()
+
+                assertEquals(listOf(20_000L, 50_000L), history.map { it.netSats })
+                assertEquals(listOf(0, 6), history.map { it.confirmations })
+                assertEquals(listOf(ChainFixtures.SEEN_AT.toLong(), 100L), history.map { it.timestampSec })
+                // The fake funding inputs are not the wallet's, so their fee is unknown.
+                assertNull(history.first().feeSats)
+                assertTrue(history.first().isPending)
+                assertEquals(history.last(), wallet.transaction(history.last().txid))
+                assertNull(wallet.transaction("00".repeat(32)))
+                assertNull(wallet.transaction("not a txid"))
+            }
+        }
+
+    @Test
     fun `the first sync is a full scan and later ones only check revealed scripts`() =
         runTest {
             BdkWallet.open(dir, descriptors, network, chain).use { wallet ->
@@ -95,6 +114,17 @@ class BdkWalletTest {
                 assertThrows<ChainUnavailableException> { wallet.sync() }
             }
             assertEquals(listOf("fullScan", "sync"), chain.calls)
+        }
+
+    @Test
+    fun `fee rates come from the backend estimates`() =
+        runTest {
+            BdkWallet.open(dir, descriptors, network, chain).use { wallet ->
+                assertThrows<ChainUnavailableException> { wallet.feeRates() }
+
+                chain.estimates = mapOf(1 to 3.2, 6 to 2.0, 144 to 1.0)
+                assertEquals(FeeOptions(fast = 4, normal = 2, slow = 1), wallet.feeRates())
+            }
         }
 
     @Test
@@ -163,6 +193,10 @@ class FakeChainClient : ChainClient {
         calls += "sync"
         throw EsploraException.Minreq("offline")
     }
+
+    var estimates: Map<Int, Double>? = null
+
+    override fun feeEstimates(): Map<Int, Double> = estimates ?: throw java.io.IOException("offline")
 
     override fun close() {
         closed = true
