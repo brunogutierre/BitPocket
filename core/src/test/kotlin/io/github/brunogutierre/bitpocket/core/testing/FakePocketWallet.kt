@@ -92,6 +92,25 @@ class FakePocketWallet(
 
     override suspend fun heartbeat() = heartbeat
 
+    var coins = emptyList<io.github.brunogutierre.bitpocket.core.wallet.HeirCoin>()
+    val heirClaims = mutableListOf<Byte>()
+
+    override suspend fun heirCoins() = coins
+
+    override suspend fun planHeirClaim(
+        address: String,
+        feeRateSatPerVb: Long,
+    ): SpendPlan = planSpend(SpendRequest(address, io.github.brunogutierre.bitpocket.core.send.SendAmount.Max, feeRateSatPerVb))
+
+    override suspend fun sendHeirClaim(
+        plan: SpendPlan,
+        heirSeed: ByteArray,
+    ): String {
+        sendError?.let { throw it }
+        heirClaims += heirSeed.first()
+        return "heir-txid-${heirClaims.size}"
+    }
+
     override fun close() {
         closed = true
     }

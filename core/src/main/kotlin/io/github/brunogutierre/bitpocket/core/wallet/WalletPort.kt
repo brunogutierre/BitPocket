@@ -82,6 +82,33 @@ interface VaultPort {
 
     /** How close the oldest Vault coin is to the heir timelock, at the synced tip (ADR 0008). */
     suspend fun heartbeat(): Heartbeat
+
+    /** Every Vault coin, with how many blocks remain before the heir can spend it. */
+    suspend fun heirCoins(): List<HeirCoin>
+
+    /**
+     * Sweeps every coin the heir can already spend (at least N confirmations) to [address], on the
+     * heir branch. Throws `SpendException` (INSUFFICIENT_FUNDS when nothing has matured).
+     */
+    suspend fun planHeirClaim(
+        address: String,
+        feeRateSatPerVb: Long,
+    ): SpendPlan
+
+    /** Signs with the heir key only, checks nSequence = N and one signature per input, broadcasts. */
+    suspend fun sendHeirClaim(
+        plan: SpendPlan,
+        heirSeed: ByteArray,
+    ): String
+}
+
+/** A Vault coin seen by the heir: spendable once [blocksLeft] is 0. */
+data class HeirCoin(
+    val sats: Long,
+    val confirmations: Int,
+    val blocksLeft: Int,
+) {
+    val matured: Boolean get() = blocksLeft == 0
 }
 
 /** The Vault pocket (the BDK wallet implements both; only Vault pockets accept Vault spends). */
