@@ -31,6 +31,7 @@ import org.bitcoindevkit.ExtractTxException
 import org.bitcoindevkit.FeeRate
 import org.bitcoindevkit.KeychainKind
 import org.bitcoindevkit.LoadWithPersistException
+import org.bitcoindevkit.OutPoint
 import org.bitcoindevkit.PersistenceException
 import org.bitcoindevkit.Persister
 import org.bitcoindevkit.Psbt
@@ -213,6 +214,7 @@ class BdkWallet internal constructor(
 
     private fun plan(
         request: SpendRequest,
+        sweep: List<OutPoint>? = null,
         path: (TxBuilder) -> TxBuilder,
     ): SpendPlan {
         val recipient =
@@ -223,7 +225,7 @@ class BdkWallet internal constructor(
             }
         return recipient.use { address ->
             address.scriptPubkey().use { script ->
-                buildPsbt(script, request, path).use {
+                buildPsbt(script, request, sweep, path).use {
                     SpendGuard.check(it, wallet)
                     wallet.persist(persister) // building reveals a change address
                     planOf(it, request, address.toString(), script.toBytes())
@@ -295,6 +297,86 @@ class BdkWallet internal constructor(
             Heartbeat.of(wallet.latestCheckpoint().height.toInt(), heights, config.timelock.blocks)
         }
 
+    override suspend fun heirCoins(): List<HeirCoin> =
+        onWallet {
+            val timelock = checkNotNull(vault) { "Not a Vault pocket" }.timelock.blocks
+            val tip = wallet.latestCheckpoint().height.toInt()
+            wallet.listUnspent().map { utxo ->
+                val confirmations = confirmationsOf(utxo.chainPosition, tip)
+                HeirCoin(
+                    utxo.txout.value
+                        .toSat()
+                        .toLong(),
+                    confirmations,
+                    (timelock - confirmations).coerceAtLeast(0),
+                )
+            }
+        }
+
+    override suspend fun planHeirClaim(
+        address: String,
+        feeRateSatPerVb: Long,
+    ): SpendPlan =
+        onWallet {
+            val timelock = checkNotNull(vault) { "Not a Vault pocket" }.timelock.blocks
+            val tip = wallet.latestCheckpoint().height.toInt()
+            // The app gates maturity itself (ADR 0002): BDK would finalize a premature heir spend.
+            val matured = wallet.listUnspent().filter { confirmationsOf(it.chainPosition, tip) >= timelock }.map { it.outpoint }
+            if (matured.isEmpty()) throw SpendException(SpendError.INSUFFICIENT_FUNDS)
+            val request = SpendRequest(address, SendAmount.Max, feeRateSatPerVb)
+            plan(request, sweep = matured) { builder ->
+                builder
+                    .excludeBelowConfirmations(timelock.toUInt())
+                    .policyPath(branchPath(KeychainKind.EXTERNAL, HEIR_BRANCH), KeychainKind.EXTERNAL)
+                    .policyPath(branchPath(KeychainKind.INTERNAL, HEIR_BRANCH), KeychainKind.INTERNAL)
+            }
+        }
+
+    override suspend fun sendHeirClaim(
+        plan: SpendPlan,
+        heirSeed: ByteArray,
+    ): String =
+        onWallet {
+            val config = checkNotNull(vault) { "Not a Vault pocket" }
+            Psbt(plan.psbtBase64).use { psbt ->
+                SpendGuard.check(psbt, wallet)
+                val secrets = mapOf(VaultRole.HEIR to VaultKeys.secretKey(heirSeed, network))
+                val signers =
+                    listOf("0", "1").map { branch ->
+                        Descriptor(
+                            config.descriptor(branch, secrets),
+                            network.toBdkNetworkKind(),
+                        ).use { SignersContainer.fromDescriptor(it) }
+                    }
+                val finalized =
+                    try {
+                        wallet.signWithSigners(psbt, signers)
+                    } finally {
+                        signers.forEach { it.close() }
+                    }
+                if (!finalized) throw SpendException(SpendError.SIGNING_FAILED)
+                broadcastSigned(psbt, plan) { tx -> VaultGuard.checkHeir(tx, config.timelock.blocks) }
+            }
+        }
+
+    private fun confirmationsOf(
+        position: ChainPosition,
+        tip: Int,
+    ): Int =
+        when (position) {
+            is ChainPosition.Confirmed -> {
+                (
+                    tip -
+                        position.confirmationBlockTime.blockId.height
+                            .toInt() + 1
+                ).coerceAtLeast(1)
+            }
+
+            is ChainPosition.Unconfirmed -> {
+                0
+            }
+        }
+
     /** Extracts, checks against the plan (and [check]), broadcasts and records a signed PSBT. */
     private fun broadcastSigned(
         psbt: Psbt,
@@ -354,17 +436,30 @@ class BdkWallet internal constructor(
         }
     }
 
+    /** [sweep]: spend exactly these coins, everything to [script] (heir claim). */
     private fun buildPsbt(
         script: Script,
         request: SpendRequest,
+        sweep: List<OutPoint>?,
         path: (TxBuilder) -> TxBuilder,
     ): Psbt =
         FeeRate.fromSatPerVb(request.feeRateSatPerVb.toULong()).use { rate ->
             val base = path(SpendGuard.restrict(TxBuilder()).feeRate(rate))
             val builder =
                 when (val amount = request.amount) {
-                    is SendAmount.Exact -> Amount.fromSat(amount.sats.toULong()).use { base.addRecipient(script, it) }
-                    SendAmount.Max -> base.drainWallet().drainTo(script)
+                    is SendAmount.Exact -> {
+                        Amount.fromSat(amount.sats.toULong()).use { base.addRecipient(script, it) }
+                    }
+
+                    SendAmount.Max -> {
+                        if (sweep !=
+                            null
+                        ) {
+                            base.addUtxos(sweep).manuallySelectedOnly().drainTo(script)
+                        } else {
+                            base.drainWallet().drainTo(script)
+                        }
+                    }
                 }
             try {
                 builder.finish(wallet)
@@ -432,8 +527,26 @@ class BdkWallet internal constructor(
     companion object {
         const val SPENDING_DB = "spending.sqlite"
 
-        /** Index of the 2-of-2 branch in the Vault's `or_d` (1 is the heir branch). */
+        /** Index of the 2-of-2 branch in the Vault's `or_d`. */
         private const val MULTISIG_BRANCH = 0uL
+
+        /** Index of the heir branch (`and_v(v:pkh(HEIR),older(N))`). */
+        private const val HEIR_BRANCH = 1uL
+
+        /** A watch-only wallet that lives only in memory (the heir claim needs no files). */
+        fun inMemory(
+            descriptors: PublicDescriptors,
+            network: SupportedNetwork,
+            chain: ChainClient,
+            vault: VaultConfig,
+        ): BdkWallet =
+            Descriptor(descriptors.external, network.toBdkNetworkKind()).use { external ->
+                Descriptor(descriptors.internal, network.toBdkNetworkKind()).use { internal ->
+                    val persister = Persister.newInMemory()
+                    BdkWallet(Wallet(external, internal, network.toBdkNetwork(), persister), persister, network, chain, vault = vault)
+                }
+            }
+
         const val VAULT_DB = "vault.sqlite"
 
         /**

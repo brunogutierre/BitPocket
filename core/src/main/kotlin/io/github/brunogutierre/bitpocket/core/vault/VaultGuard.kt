@@ -21,6 +21,18 @@ object VaultGuard {
         }
     }
 
+    /** The heir branch: every input carries nSequence = N (so OP_CHECKSEQUENCEVERIFY passes) and one signature. */
+    fun checkHeir(
+        tx: Transaction,
+        timelockBlocks: Int,
+    ) {
+        tx.input().forEach { input ->
+            if (input.sequence != timelockBlocks.toUInt() || signatureCount(input.witness) != 1) {
+                throw SpendException(SpendError.WRONG_BRANCH)
+            }
+        }
+    }
+
     /** DER-encoded ECDSA signatures (0x30 ... + sighash byte) in a witness stack. */
     internal fun signatureCount(witness: List<ByteArray>): Int = witness.count { it.size in 9..73 && it[0] == 0x30.toByte() }
 }
