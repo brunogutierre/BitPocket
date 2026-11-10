@@ -5,7 +5,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -20,6 +23,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -29,6 +33,9 @@ import io.github.brunogutierre.bitpocket.biometric.BiometricSeedOpener
 import io.github.brunogutierre.bitpocket.core.format.BitcoinFormat
 import io.github.brunogutierre.bitpocket.core.send.AmountError
 import io.github.brunogutierre.bitpocket.core.send.AmountParser
+import io.github.brunogutierre.bitpocket.core.send.BlockReason
+import io.github.brunogutierre.bitpocket.core.send.ConfirmReason
+import io.github.brunogutierre.bitpocket.core.send.GuardrailVerdict
 import io.github.brunogutierre.bitpocket.core.send.RecipientError
 import io.github.brunogutierre.bitpocket.core.send.SpendError
 import io.github.brunogutierre.bitpocket.core.send.SpendPlan
@@ -172,7 +179,7 @@ private fun ReviewStage(
         onBack = viewModel::edit,
         network = viewModel.network,
         bottomActions = {
-            PrimaryButton(stringResource(R.string.send_confirm), onClick = viewModel::confirm)
+            PrimaryButton(stringResource(R.string.send_confirm), onClick = viewModel::confirm, enabled = state.canConfirm)
             SecondaryButton(stringResource(R.string.send_edit), onClick = viewModel::edit)
         },
     ) {
@@ -195,6 +202,7 @@ private fun ReviewStage(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        GuardrailNotice(viewModel, state)
         when {
             state.broadcastFailed -> {
                 WarningBanner(
@@ -210,6 +218,50 @@ private fun ReviewStage(
 
             else -> {
                 WarningBanner(stringResource(R.string.send_review_check_title), stringResource(R.string.send_review_check_body))
+            }
+        }
+    }
+}
+
+/** A hard limit (red banner) or the confirmations to tick before sending. */
+@Composable
+private fun GuardrailNotice(
+    viewModel: SendViewModel,
+    state: SendUiState,
+) {
+    when (val verdict = state.guardrail) {
+        GuardrailVerdict.Allowed -> {
+            Unit
+        }
+
+        is GuardrailVerdict.Blocked -> {
+            val allowed = BitcoinFormat.sats(verdict.allowedSats)
+            val body =
+                when (verdict.reason) {
+                    BlockReason.PER_TX_LIMIT -> stringResource(R.string.guardrail_blocked_per_tx, allowed)
+                    BlockReason.WINDOW_LIMIT -> stringResource(R.string.guardrail_blocked_window, allowed)
+                }
+            WarningBanner(stringResource(R.string.guardrail_blocked_title), body, severity = BannerSeverity.ERROR)
+        }
+
+        is GuardrailVerdict.NeedsConfirmation -> {
+            verdict.reasons.sorted().forEach { reason ->
+                val text =
+                    when (reason) {
+                        ConfirmReason.NEW_RECIPIENT -> R.string.guardrail_confirm_new_recipient
+                        ConfirmReason.LARGE_SHARE -> R.string.guardrail_confirm_large_share
+                    }
+                val checked = reason in state.acknowledged
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .toggleable(value = checked, role = Role.Checkbox, onValueChange = { viewModel.acknowledge(reason, it) }),
+                ) {
+                    Checkbox(checked = checked, onCheckedChange = null)
+                    Text(stringResource(text), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = Spacing.sm))
+                }
             }
         }
     }

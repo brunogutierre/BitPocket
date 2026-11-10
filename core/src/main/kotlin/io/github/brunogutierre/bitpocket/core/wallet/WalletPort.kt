@@ -3,6 +3,7 @@ package io.github.brunogutierre.bitpocket.core.wallet
 import io.github.brunogutierre.bitpocket.core.network.SupportedNetwork
 import io.github.brunogutierre.bitpocket.core.send.FeeOptions
 import io.github.brunogutierre.bitpocket.core.send.SpendPort
+import io.github.brunogutierre.bitpocket.core.send.SpendingStats
 
 /** Balance of a pocket, in satoshis. */
 data class Balance(
@@ -39,6 +40,9 @@ interface WalletPort {
 
     /** One transaction by id, or null if the wallet does not know it. */
     suspend fun transaction(txid: String): HistoryItem?
+
+    /** Recent spending for the guardrails, over the last [windowBlocks] blocks of the synced tip. */
+    suspend fun spendingStats(windowBlocks: Int): SpendingStats
 
     companion object {
         const val MAX_UNUSED_ADDRESSES = 10

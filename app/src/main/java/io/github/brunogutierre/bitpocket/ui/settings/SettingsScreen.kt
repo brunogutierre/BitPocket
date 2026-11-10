@@ -53,6 +53,7 @@ fun SettingsScreen(
     seedCipher: SeedCipher,
     onBack: () -> Unit,
     onChangePin: () -> Unit,
+    onGuardrails: () -> Unit,
     onLock: () -> Unit,
     onWiped: () -> Unit,
 ) {
@@ -63,7 +64,7 @@ fun SettingsScreen(
     when {
         phrase != null -> RecoveryPhrase(phrase, viewModel::closePhrase)
         action != null -> PinStep(viewModel, state, action, seedCipher)
-        else -> SettingsList(viewModel, state, onBack, onChangePin, onLock)
+        else -> SettingsList(viewModel, state, onBack, onChangePin, onGuardrails, onLock)
     }
 }
 
@@ -73,6 +74,7 @@ private fun SettingsList(
     state: SettingsUiState,
     onBack: () -> Unit,
     onChangePin: () -> Unit,
+    onGuardrails: () -> Unit,
     onLock: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -103,6 +105,7 @@ private fun SettingsList(
                     )
                 },
             )
+            Entry(stringResource(R.string.guardrails_title), stringResource(R.string.settings_guardrails_body), onGuardrails)
             Entry(stringResource(R.string.settings_auto_lock), stringResource(state.autoLock.label()), viewModel::openAutoLock)
             Entry(
                 stringResource(R.string.settings_show_phrase),

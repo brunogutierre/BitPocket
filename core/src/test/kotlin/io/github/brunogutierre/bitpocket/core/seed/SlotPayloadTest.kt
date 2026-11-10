@@ -77,9 +77,11 @@ class SlotPayloadTest {
 
                 "truncated" -> valid.copyOf(valid.size - 1)
 
-                "settings" -> valid.copyOf().also { it[it.size - 1] = 42 }
+                // An unknown auto-lock id. The first settings record is auto-lock, after the
+                // 3-byte header, the entropy, the blob length (2), the settings length (2) and
+                // the record's tag and length (3).
+                "settings" -> valid.copyOf().also { it[3 + entropy.size + 2 + 2 + 3] = 42 }
 
-                // unknown auto-lock id
                 else -> valid + 0
             }
 

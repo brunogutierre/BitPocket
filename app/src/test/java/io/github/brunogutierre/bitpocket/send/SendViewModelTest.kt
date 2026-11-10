@@ -6,7 +6,10 @@ import io.github.brunogutierre.bitpocket.MainDispatcherExtension
 import io.github.brunogutierre.bitpocket.biometric.BiometricFailure
 import io.github.brunogutierre.bitpocket.biometric.BiometricSeedResult
 import io.github.brunogutierre.bitpocket.core.send.AmountError
+import io.github.brunogutierre.bitpocket.core.send.BlockReason
+import io.github.brunogutierre.bitpocket.core.send.ConfirmReason
 import io.github.brunogutierre.bitpocket.core.send.FeeOptions
+import io.github.brunogutierre.bitpocket.core.send.GuardrailVerdict
 import io.github.brunogutierre.bitpocket.core.send.RecipientError
 import io.github.brunogutierre.bitpocket.core.send.SendAmount
 import io.github.brunogutierre.bitpocket.core.send.SpendError
@@ -14,6 +17,9 @@ import io.github.brunogutierre.bitpocket.core.send.SpendException
 import io.github.brunogutierre.bitpocket.core.send.SpendPlan
 import io.github.brunogutierre.bitpocket.core.send.SpendRequest
 import io.github.brunogutierre.bitpocket.core.session.SeedOutcome
+import io.github.brunogutierre.bitpocket.core.settings.Guardrails
+import io.github.brunogutierre.bitpocket.core.settings.ScheduledGuardrails
+import io.github.brunogutierre.bitpocket.core.settings.WalletSettings
 import io.github.brunogutierre.bitpocket.core.wallet.ChainUnavailableException
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -29,19 +35,28 @@ class SendViewModelTest {
     @RegisterExtension
     val main = MainDispatcherExtension()
 
-    private val pocket = FakePocketWallet().apply { fees = FeeOptions(fast = 9, normal = 4, slow = 1) }
+    // A known recipient and a large balance: the default guardrails then ask for nothing.
+    private val pocket =
+        FakePocketWallet().apply {
+            fees = FeeOptions(fast = 9, normal = 4, slow = 1)
+            stats = stats.copy(pastRecipients = setOf(ADDRESS), balanceSats = 1_000_000)
+        }
     private val access = FakeWalletAccess()
     private val plan = SpendPlan("cHNidP8=", ADDRESS, 10_000, 300, 4, 39_700, 1)
 
     private fun SendViewModel(
         pocket: FakePocketWallet,
         biometricSeed: ByteArray? = null,
-    ) = SendViewModel(pocket, access, biometricSeed, main.dispatcher)
+        settings: WalletSettings = WalletSettings(),
+    ) = SendViewModel(pocket, access, biometricSeed, settings, main.dispatcher)
 
     /** A view model already on REVIEW with [plan]. */
-    private fun reviewing(biometricSeed: ByteArray? = null): SendViewModel {
+    private fun reviewing(
+        biometricSeed: ByteArray? = null,
+        settings: WalletSettings = WalletSettings(),
+    ): SendViewModel {
         pocket.plans += plan
-        return SendViewModel(pocket, biometricSeed).apply {
+        return SendViewModel(pocket, biometricSeed, settings).apply {
             onAddressChange(ADDRESS)
             onAmountChange("10000")
             review()
@@ -199,6 +214,43 @@ class SendViewModelTest {
         vm.onBiometricResult(BiometricSeedResult.Opened(ByteArray(16)))
         assertEquals(SpendError.REJECTED, vm.state.value.spendError)
         assertFalse(vm.state.value.broadcastFailed)
+    }
+
+    @Test
+    fun `a spend over a hard limit cannot be confirmed`() {
+        val vm = reviewing(settings = WalletSettings(guardrails = Guardrails(perTxLimitSats = 5_000)))
+
+        assertEquals(GuardrailVerdict.Blocked(BlockReason.PER_TX_LIMIT, 5_000), vm.state.value.guardrail)
+        assertFalse(vm.state.value.canConfirm)
+        vm.confirm()
+        assertEquals(SendStage.REVIEW, vm.state.value.stage)
+    }
+
+    @Test
+    fun `a loosening only counts once the synced tip reaches it`() {
+        val strict = Guardrails(perTxLimitSats = 5_000)
+        val settings =
+            WalletSettings(guardrails = strict, scheduledGuardrails = ScheduledGuardrails(Guardrails(), activatesAtHeight = 1_001))
+
+        assertFalse(reviewing(settings = settings).state.value.canConfirm)
+        pocket.stats = pocket.stats.copy(tipHeight = 1_001)
+        assertTrue(reviewing(settings = settings).state.value.canConfirm)
+    }
+
+    @Test
+    fun `new recipients and large shares must be ticked before confirming`() {
+        pocket.stats = pocket.stats.copy(pastRecipients = emptySet(), balanceSats = 15_000)
+        val vm = reviewing(biometricSeed = byteArrayOf(1))
+        val reasons = setOf(ConfirmReason.NEW_RECIPIENT, ConfirmReason.LARGE_SHARE)
+        assertEquals(GuardrailVerdict.NeedsConfirmation(reasons), vm.state.value.guardrail)
+
+        vm.acknowledge(ConfirmReason.NEW_RECIPIENT, true)
+        vm.confirm()
+        assertEquals(SendStage.REVIEW, vm.state.value.stage)
+
+        vm.acknowledge(ConfirmReason.LARGE_SHARE, true)
+        vm.confirm()
+        assertEquals(SendStage.AUTH_BIOMETRIC, vm.state.value.stage)
     }
 
     private companion object {

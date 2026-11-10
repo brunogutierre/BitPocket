@@ -1,6 +1,7 @@
 package io.github.brunogutierre.bitpocket
 
 import io.github.brunogutierre.bitpocket.ui.navigation.CreateSeed
+import io.github.brunogutierre.bitpocket.ui.navigation.GuardrailsSettings
 import io.github.brunogutierre.bitpocket.ui.navigation.Home
 import io.github.brunogutierre.bitpocket.ui.navigation.Lock
 import io.github.brunogutierre.bitpocket.ui.navigation.Receive
@@ -22,6 +23,7 @@ class RouteGuardTest {
         assertEquals(Lock, afterDeath(Home))
         assertEquals(Lock, afterDeath(Receive))
         assertEquals(Lock, afterDeath(Send))
+        assertEquals(Lock, afterDeath(GuardrailsSettings))
         assertEquals(Lock, afterDeath(TransactionDetails("ab")))
         assertEquals(Lock, afterDeath(Welcome))
         assertEquals(Lock, afterDeath(SetPin))

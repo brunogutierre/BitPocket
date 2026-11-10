@@ -27,15 +27,26 @@ enum class AutoLock(
  */
 data class WalletSettings(
     val autoLock: AutoLock = AutoLock.DEFAULT,
+    val guardrails: Guardrails = Guardrails(),
+    /** A loosening of [guardrails] waiting for its activation height (ADR 0006). */
+    val scheduledGuardrails: ScheduledGuardrails? = null,
 ) {
     /**
      * Tag-length-value records: `tag (1) | length (2) | value`. Unknown tags are skipped when
      * decoding, so a newer app can add settings without breaking older payloads.
      */
-    fun encode(): ByteArray = record(TAG_AUTO_LOCK, byteArrayOf(autoLock.id))
+    fun encode(): ByteArray {
+        val scheduled =
+            scheduledGuardrails?.let {
+                record(TAG_SCHEDULED_GUARDRAILS, it.guardrails.encode() + ByteBuffer.allocate(4).putInt(it.activatesAtHeight).array())
+            } ?: ByteArray(0)
+        return record(TAG_AUTO_LOCK, byteArrayOf(autoLock.id)) + record(TAG_GUARDRAILS, guardrails.encode()) + scheduled
+    }
 
     companion object {
         private const val TAG_AUTO_LOCK: Byte = 1
+        private const val TAG_GUARDRAILS: Byte = 2
+        private const val TAG_SCHEDULED_GUARDRAILS: Byte = 3
 
         /** @throws IllegalArgumentException for malformed records or values. */
         fun decode(bytes: ByteArray): WalletSettings {
@@ -45,10 +56,28 @@ data class WalletSettings(
                 while (buffer.hasRemaining()) {
                     val tag = buffer.get()
                     val value = ByteArray(buffer.short.toInt() and 0xFFFF).also { buffer.get(it) }
-                    if (tag == TAG_AUTO_LOCK) {
-                        require(value.size == 1) { "Bad auto-lock record" }
-                        settings = settings.copy(autoLock = requireNotNull(AutoLock.of(value[0])) { "Unknown auto-lock id" })
-                    }
+                    settings =
+                        when (tag) {
+                            TAG_AUTO_LOCK -> {
+                                require(value.size == 1) { "Bad auto-lock record" }
+                                settings.copy(autoLock = requireNotNull(AutoLock.of(value[0])) { "Unknown auto-lock id" })
+                            }
+
+                            TAG_GUARDRAILS -> {
+                                require(value.size == Guardrails.ENCODED_SIZE) { "Bad guardrails record" }
+                                settings.copy(guardrails = Guardrails.decode(ByteBuffer.wrap(value)))
+                            }
+
+                            TAG_SCHEDULED_GUARDRAILS -> {
+                                require(value.size == Guardrails.ENCODED_SIZE + 4) { "Bad scheduled guardrails record" }
+                                val buffer = ByteBuffer.wrap(value)
+                                settings.copy(scheduledGuardrails = ScheduledGuardrails(Guardrails.decode(buffer), buffer.int))
+                            }
+
+                            else -> {
+                                settings
+                            }
+                        }
                 }
             } catch (e: java.nio.BufferUnderflowException) {
                 throw IllegalArgumentException("Truncated settings", e)

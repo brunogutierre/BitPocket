@@ -8,6 +8,7 @@ import io.github.brunogutierre.bitpocket.core.send.SpendError
 import io.github.brunogutierre.bitpocket.core.send.SpendException
 import io.github.brunogutierre.bitpocket.core.send.SpendPlan
 import io.github.brunogutierre.bitpocket.core.send.SpendRequest
+import io.github.brunogutierre.bitpocket.core.send.SpendingStats
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -87,6 +88,35 @@ class BdkWallet internal constructor(
         onWallet {
             val id = runCatching { Txid.fromString(txid) }.getOrNull() ?: return@onWallet null
             id.use { historyItem(it, wallet.latestCheckpoint().height) }
+        }
+
+    override suspend fun spendingStats(windowBlocks: Int): SpendingStats =
+        onWallet {
+            val tip = wallet.latestCheckpoint().height.toInt()
+            var spent = 0L
+            val recipients = mutableSetOf<String>()
+            wallet.transactions().forEach { canonical ->
+                val details = canonical.transaction.computeTxid().use { wallet.txDetails(it) } ?: return@forEach
+                if (details.balanceDelta >= 0) return@forEach
+                val position = details.chainPosition
+                val recent =
+                    position !is ChainPosition.Confirmed || tip -
+                        position.confirmationBlockTime.blockId.height
+                            .toInt() < windowBlocks
+                if (recent) spent -= details.balanceDelta
+                canonical.transaction.output().filterNot { wallet.isMine(it.scriptPubkey) }.forEach { output ->
+                    runCatching { Address.fromScript(output.scriptPubkey, network.toBdkNetwork()).use { it.toString() } }
+                        .getOrNull()
+                        ?.let(recipients::add)
+                }
+            }
+            val balance = wallet.balance()
+            SpendingStats(
+                tipHeight = tip,
+                spentInWindowSats = spent,
+                pastRecipients = recipients,
+                balanceSats = (balance.confirmed.toSat() + balance.trustedPending.toSat() + balance.untrustedPending.toSat()).toLong(),
+            )
         }
 
     private fun historyItem(

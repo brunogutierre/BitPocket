@@ -164,5 +164,26 @@
     <string name="fingerprint_description">Address fingerprint: %1$s</string>
     <string name="receive_fingerprint_hint">Ask the sender to check these words and picture before paying.</string>
     <string name="send_review_fingerprint_hint">Compare with the fingerprint on the recipient\'s screen.</string>
+    <string name="guardrail_blocked_title">Over your spending limit</string>
+    <string name="guardrail_blocked_per_tx">At most %1$s can leave the wallet in one transaction, fee included. Lower the amount, or raise the limit in Settings (it takes effect after about a day).</string>
+    <string name="guardrail_blocked_window">Only %1$s more can leave the wallet in the last 24 hours, fee included. Lower the amount or wait.</string>
+    <string name="guardrail_confirm_new_recipient">I have never paid this address. I checked it with the recipient.</string>
+    <string name="guardrail_confirm_large_share">This sends more than half of my balance.</string>
+    <string name="settings_guardrails_body">Limits and extra confirmations for sending.</string>
+    <string name="guardrails_title">Spending limits</string>
+    <string name="guardrails_intro">Limits count everything that leaves the wallet, fee included. Stricter limits apply at once; looser ones wait about 24 hours (144 blocks), so nobody can raise them and spend right away.</string>
+    <string name="guardrails_per_tx">Per transaction</string>
+    <string name="guardrails_window">Per 24 hours (144 blocks)</string>
+    <string name="guardrails_no_limit">No limit</string>
+    <string name="guardrails_invalid">Use a whole number of sats, or leave it empty for no limit.</string>
+    <string name="guardrails_confirm_new">Confirm addresses never paid before</string>
+    <string name="guardrails_confirm_large">Confirm spends over half the balance</string>
+    <string name="guardrails_save">Save</string>
+    <string name="guardrails_pin">Enter your PIN to change the spending limits.</string>
+    <string name="guardrails_saved">Saved.</string>
+    <string name="guardrails_scheduled_title">Waiting to take effect</string>
+    <string name="guardrails_scheduled_body">The looser limits apply from block %1$d (about a day). Until then the stricter values stay in force.</string>
+    <string name="guardrails_sync_title">Sync first</string>
+    <string name="guardrails_sync_body">Loosening a limit counts 144 blocks from the current chain height. Open Home and let it sync, then try again.</string>
     <string name="pin_too_weak">PIN too easy to guess. Choose another one.</string>
 </resources>
